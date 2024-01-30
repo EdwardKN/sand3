@@ -9,6 +9,8 @@ var chunkAmount = 0;
 
 var maxSimulatedAtTime = 200;
 
+var tool = 0;
+
 function init() {
     player = new Player();
     fixCanvas();
@@ -74,7 +76,11 @@ function updateCursor() {
 
 
             if (!chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)]) {
-                chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new Liquid(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, [10, 10, 255, 255]);
+                if (tool == 0) {
+                    chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new Liquid(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, [10, 10, 255, 255]);
+                } else {
+                    chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new MovableSolid(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, [200, 200, 150, 255]);
+                }
 
                 chunks[`${chunkX},${chunkY}`].updateFrameBuffer();
                 chunks[`${chunkX},${chunkY}`].shouldStepNextFrame = true;
@@ -185,6 +191,8 @@ class Element {
         this.x = x;
         this.y = y;
         this.col = col;
+
+        this.velY = 1;
     }
     moveTo(x, y) {
         let chunkX = ~~((this.x - (this.x < 0 ? -1 : 0)) / CHUNKSIZE) + (this.x < 0 ? -1 : 0);
@@ -231,16 +239,31 @@ class Solid extends Element {
 class MovableSolid extends Solid {
     step() {
         let targetCell = getElementAtCell(this.x, this.y + 1);
-        if (targetCell == undefined) {
-            this.moveTo(this.x, this.y + 1)
+        if (targetCell == undefined || targetCell instanceof Liquid) {
+            this.lookVertically();
         } else {
             this.lookDiagonally(~~(Math.random() * 2) || -1, true);
+        }
+    }
+    lookVertically() {
+        let maxDir = 0;
+        for (let i = 1; i < this.velY + 1; i++) {
+            let targetCell = getElementAtCell(this.x, this.y + i);
+            if (targetCell == undefined || targetCell instanceof Liquid) {
+                maxDir = i
+            } else {
+                i = Infinity;
+            }
+        }
+        if (maxDir !== 0) {
+            this.velY++;
+            this.moveTo(this.x, this.y + maxDir)
         }
     }
     lookDiagonally(dir, first) {
         let targetCell = getElementAtCell(this.x + dir, this.y + 1);
 
-        if (targetCell == undefined) {
+        if (targetCell == undefined || targetCell instanceof Liquid) {
             this.moveTo(this.x + dir, this.y + 1)
         } else if (first == true) {
             this.lookDiagonally(-dir, false);
@@ -250,19 +273,35 @@ class MovableSolid extends Solid {
 class Liquid extends Element {
     constructor(x, y, col) {
         super(x, y, col)
-        this.dispersionRate = 5;
+        this.dispersionRate = 10;
     }
     step() {
         let targetCell = getElementAtCell(this.x, this.y + 1);
         if (targetCell == undefined) {
-            this.moveTo(this.x, this.y + 1)
+            this.lookVertically();
         } else {
+            this.velY = 1;
             this.lookHorizontally(~~(Math.random() * 2) || -1);
+        }
+    }
+    lookVertically() {
+        let maxDir = 0;
+        for (let i = 1; i < this.velY + 1; i++) {
+            let targetCell = getElementAtCell(this.x, this.y + i);
+            if (targetCell == undefined) {
+                maxDir = i
+            } else {
+                i = Infinity;
+            }
+        }
+        if (maxDir !== 0) {
+            this.velY++;
+            this.moveTo(this.x, this.y + maxDir)
         }
     }
     lookHorizontally(dir) {
         let maxDir = 0;
-        for (let i = 1; i < this.dispersionRate + 1; i++) {
+        for (let i = 1; i < (Math.random() * this.dispersionRate * 2) + 1; i++) {
             let targetCell1 = getElementAtCell(this.x + dir * i, this.y);
             let targetCell2 = getElementAtCell(this.x + dir * -i, this.y);
             if (targetCell1 == undefined) {
