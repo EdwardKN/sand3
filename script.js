@@ -306,7 +306,7 @@ function testGenerate(chunkX, chunkY) {
             chunks[`${x},${y}`] = new Chunk(x, y)
             for (let elementX = 0; elementX < CHUNKSIZE; elementX++) {
                 for (let elementY = 0; elementY < CHUNKSIZE; elementY++) {
-                    let perlin = getPerlinNoise(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, 20, 100)
+                    let perlin = getPerlinLayers(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, 20, [100, 50], [5, 1])
                     if (perlin > 0.5 || Math.abs(x) > chunkX - 1 || Math.abs(y) > chunkX - 1) {
                         chunks[`${x},${y}`].elements[elementCoordinate(elementX, elementY)] = new Solid(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [~~(perlin * 255), ~~(perlin * 255), ~~(perlin * 255), 255]);
                     }
@@ -325,6 +325,16 @@ function getPerlinNoise(x, y, perlinSeed, resolution) {
 
     return value;
 
+}
+function getPerlinLayers(x, y, perlinSeed, resolutions, weights) {
+    let amount = resolutions.length;
+    let value = 0;
+
+    for (let i = 0; i < amount; i++) {
+        value += getPerlinNoise(x, y, perlinSeed * (i + 1), resolutions[i]) * weights[i];
+    }
+    value /= sum(weights);
+    return value;
 }
 
 window.onload = init;
