@@ -35,6 +35,8 @@ async function update() {
 
     c.drawText(chunkAmount, 10, 40, 10)
 
+    c.drawText(maxSimulatedAtTime, 10, 60, 10)
+
 
     renderC.drawImage(canvas, 0, 0, renderCanvas.width, renderCanvas.height);
 
@@ -101,6 +103,8 @@ function drawVisibleChunks() {
 
 async function updateChunks() {
     let filteredChunks = Object.values(chunks).filter(e => e.shouldStep);
+    filteredChunks = filteredChunks.sort((a, b) => distance(a.x * CHUNKSIZE - canvas.width / 2, a.y * CHUNKSIZE - canvas.height / 2, player.x, player.y) - distance(b.x * CHUNKSIZE - canvas.width / 2, b.y * CHUNKSIZE - canvas.height / 2, player.x, player.y))
+    let notStepped = filteredChunks.splice(maxSimulatedAtTime, filteredChunks.length - maxSimulatedAtTime);
     chunkAmount = filteredChunks.length;
     for (let i = 0; i < filteredChunks.length; i += 2) {
         let chunk = filteredChunks[i];
@@ -110,10 +114,19 @@ async function updateChunks() {
         let chunk = filteredChunks[i];
         chunk.updateElements();
     }
-
+    notStepped.forEach(e => e.hasStepped = false);
     Object.values(chunks).forEach(e => {
         e.shiftShouldStepAndReset()
     });
+    if (chunkAmount == maxSimulatedAtTime) {
+        if (fps > 58) {
+            maxSimulatedAtTime++;
+        }
+    }
+    if (fps < 60) {
+        maxSimulatedAtTime--;
+        if (maxSimulatedAtTime < 15) maxSimulatedAtTime = 15;
+    }
 }
 
 class Chunk {
@@ -123,6 +136,7 @@ class Chunk {
         this.frameBuffer = new ImageData(CHUNKSIZE, CHUNKSIZE);
         this.shouldStep = true;
         this.shouldStepNextFrame = false;
+        this.hasStepped = true;
         this.hasUpdatedSinceFrameBufferChange = true;
         this.elements = [];
     }
@@ -132,8 +146,10 @@ class Chunk {
         }
     }
     shiftShouldStepAndReset() {
-        this.shouldStep = this.shouldStepNextFrame;
-        this.shouldStepNextFrame = false;
+        if (this.hasStepped) {
+            this.shouldStep = this.shouldStepNextFrame;
+            this.shouldStepNextFrame = false;
+        }
     }
     updateFrameBuffer() {
         this.hasUpdatedSinceFrameBufferChange = false;
@@ -149,6 +165,7 @@ class Chunk {
         }
     }
     updateElements() {
+        this.hasStepped = true;
         this.hasUpdatedSinceFrameBufferChange = true;
         let filteredElements = this.elements.filter(e => (e instanceof MovableSolid || e instanceof Liquid))
 
@@ -240,7 +257,7 @@ class Liquid extends Element {
         if (targetCell == undefined) {
             this.moveTo(this.x, this.y + 1)
         } else {
-            this.lookHorizontally(Math.random() > 0.5 ? -1 : 1);
+            this.lookHorizontally(~~(Math.random() * 2) || -1);
         }
     }
     lookHorizontally(dir) {
