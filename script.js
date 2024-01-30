@@ -273,7 +273,7 @@ class MovableSolid extends Solid {
 class Liquid extends Element {
     constructor(x, y, col) {
         super(x, y, col)
-        this.dispersionRate = 10;
+        this.dispersionRate = 100;
     }
     step() {
         let targetCell = getElementAtCell(this.x, this.y + 1);
@@ -281,7 +281,7 @@ class Liquid extends Element {
             this.lookVertically();
         } else {
             this.velY = 1;
-            this.lookHorizontally(~~(Math.random() * 2) || -1);
+            this.lookHorizontally();
         }
     }
     lookVertically() {
@@ -299,24 +299,27 @@ class Liquid extends Element {
             this.moveTo(this.x, this.y + maxDir)
         }
     }
-    lookHorizontally(dir) {
-        let maxDir = 0;
+    lookHorizontally() {
+        let maxLeft = 0;
+        let maxRight = 0;
         for (let i = 1; i < (Math.random() * this.dispersionRate * 2) + 1; i++) {
-            let targetCell1 = getElementAtCell(this.x + dir * i, this.y);
-            let targetCell2 = getElementAtCell(this.x + dir * -i, this.y);
+            let targetCell1 = getElementAtCell(this.x + i, this.y);
+            let targetCell2 = getElementAtCell(this.x - i, this.y);
             if (targetCell1 == undefined) {
-                maxDir = i * dir
+                maxRight = i
             } else if (targetCell2 == undefined) {
-                maxDir = i * dir * -1
+                maxLeft = i
             } else {
                 i = undefined;
             }
         }
-        if (maxDir !== 0) {
-            if (maxDir * dir < 0) {
-                this.lookHorizontally(-dir)
+        if (maxLeft !== 0 || maxRight !== 0) {
+            if (maxLeft > maxRight) {
+                this.moveTo(this.x - maxLeft, this.y)
+            } else if (maxLeft < maxRight) {
+                this.moveTo(this.x + maxRight, this.y)
             } else {
-                this.moveTo(this.x + maxDir, this.y)
+                this.moveTo(this.x + maxRight * (~~(Math.random() * 2) || -1), this.y)
             }
         }
     }
