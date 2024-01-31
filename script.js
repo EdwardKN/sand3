@@ -1,5 +1,7 @@
 const CHUNKSIZE = 32;
 
+const TRANS = true;
+
 var chunks = {};
 var player;
 
@@ -78,9 +80,11 @@ function updateCursor() {
 
             if (!chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)]) {
                 if (tool == 1) {
-                    chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new Liquid(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, [10, 10, 255, 255]);
+                    let offset = randomIntFromRange(0, 30) - 15
+                    chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new Liquid(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, [102 + offset, 171 + offset, 230 + offset / 2, 100]);
                 } else if (tool == 2) {
-                    chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new MovableSolid(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, [200, 200, 150, 255]);
+                    let offset = randomIntFromRange(0, 20) - 10
+                    chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new MovableSolid(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, [195 + offset, 195 + offset, 145 + offset, 255]);
                 }
 
                 chunks[`${chunkX},${chunkY}`].updateFrameBuffer();
@@ -152,15 +156,18 @@ class Chunk {
         this.x = x;
         this.y = y;
         this.frameBuffer = new ImageData(CHUNKSIZE, CHUNKSIZE);
+        this.backFrameBuffer = new ImageData(CHUNKSIZE, CHUNKSIZE);
         this.shouldStep = true;
         this.shouldStepNextFrame = false;
         this.hasStepped = true;
         this.hasUpdatedSinceFrameBufferChange = true;
         this.elements = [];
+        this.backgroundElements = [];
     }
     initElements() {
         for (let i = 0; i < CHUNKSIZE; i++) {
             this.elements.push(undefined);
+            this.backgroundElements.push(undefined);
         }
     }
     shiftShouldStepAndReset() {
@@ -174,11 +181,30 @@ class Chunk {
         for (let x = 0; x < CHUNKSIZE; x++) {
             for (let y = 0; y < CHUNKSIZE; y++) {
                 let coord = elementCoordinate(x, y)
-                let el = this.elements[coord];
+                let el = this.elements[coord] || undefined;
+                let backgroundEL = this.backgroundElements[coord];
                 let dataIndex = coord * 4
-                for (let i = 0; i < 4; i++) {
-                    this.frameBuffer.data[dataIndex + i] = el?.col[i] || 255;
+                if (!el) {
+                    for (let i = 0; i < 4; i++) {
+                        this.frameBuffer.data[dataIndex + i] = backgroundEL?.drawCol[i] || 255;
+                    }
+                } else if (TRANS) {
+                    for (let i = 0; i < 3; i++) {
+                        let ca = el?.drawCol[i];
+                        let aa = el?.drawCol[3] / 255;
+                        let cb = backgroundEL?.drawCol[i] || 255;
+                        let ab = (backgroundEL?.drawCol[3] || 255) / 255;
+                        let a0 = aa + ab * (1 - aa);
+
+                        this.frameBuffer.data[dataIndex + i] = (ca * aa + cb * ab * (1 - aa)) / a0;
+                    }
+                    this.frameBuffer.data[dataIndex + 3] = 255;
+                } else {
+                    for (let i = 0; i < 4; i++) {
+                        this.frameBuffer.data[dataIndex + i] = el?.drawCol[i] || 255;
+                    }
                 }
+
             }
         }
     }
@@ -203,6 +229,7 @@ class Element {
         this.x = x;
         this.y = y;
         this.col = col;
+        this.drawCol = col;
 
         this.velY = 1;
     }
@@ -242,6 +269,10 @@ class Element {
         chunks[`${chunkX},${chunkY - 1}`].shouldStepNextFrame = true;
 
     }
+}
+
+class Background extends Element {
+
 }
 
 class Solid extends Element {
@@ -288,12 +319,18 @@ class Liquid extends Element {
         this.dispersionRate = 20;
     }
     step() {
+        this.drawCol = [...this.col];
         let targetCell = getElementAtCell(this.x, this.y + 1);
         if (targetCell == undefined) {
             this.lookVertically();
         } else {
             this.velY = 1;
             this.lookHorizontally();
+        }
+        if (getElementAtCell(this.x, this.y - 1) == undefined) {
+            this.drawCol[0] -= 50;
+            this.drawCol[1] -= 50;
+            this.drawCol[2] -= 50;
         }
     }
     lookVertically() {
@@ -356,16 +393,16 @@ class Player {
     }
     update() {
         if (pressedKeys['KeyA']) {
-            this.x--;
+            this.x -= 3;
         }
         if (pressedKeys['KeyD']) {
-            this.x++;
+            this.x += 3;
         }
         if (pressedKeys['KeyW']) {
-            this.y--;
+            this.y -= 3;
         }
         if (pressedKeys['KeyS']) {
-            this.y++;
+            this.y += 3;
         }
     }
 }
@@ -395,8 +432,11 @@ function testGenerate(chunkX, chunkY) {
             for (let elementX = 0; elementX < CHUNKSIZE; elementX++) {
                 for (let elementY = 0; elementY < CHUNKSIZE; elementY++) {
                     let perlin = getPerlinLayers(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, 20, [100, 50], [5, 1])
+                    let offset = randomIntFromRange(0, 6) - 3;
                     if (perlin > 0.5 || Math.abs(x) > chunkX - 1 || Math.abs(y) > chunkX - 1) {
-                        chunks[`${x},${y}`].elements[elementCoordinate(elementX, elementY)] = new Solid(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [~~(perlin * 255), ~~(perlin * 255), ~~(perlin * 255), 255]);
+                        chunks[`${x},${y}`].elements[elementCoordinate(elementX, elementY)] = new Solid(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [~~(perlin * 255) + offset, ~~(perlin * 255) + offset, ~~(perlin * 255) + offset, 255]);
+                    } else {
+                        chunks[`${x},${y}`].backgroundElements[elementCoordinate(elementX, elementY)] = new Background(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [~~(perlin * 255) + offset + 100, ~~(perlin * 255) + offset + 100, ~~(perlin * 255) + offset + 100, 255]);
                     }
                 }
             }
