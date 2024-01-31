@@ -49,7 +49,6 @@ renderCanvas.addEventListener("mousedown", function (e) {
     mouse.down = true;
     mouse.up = false;
     mouse.which = e.which;
-
 });
 renderCanvas.addEventListener("mouseup", function (e) {
     mouse.down = false;
@@ -732,6 +731,7 @@ var pressedKeys = [];
 window.addEventListener('keydown', function (e) {
     console.log(e.code)
     pressedKeys[e.code] = true;
+    changeTool(e.code);
 })
 
 window.addEventListener('keyup', function (e) {

@@ -9,7 +9,7 @@ var chunkAmount = 0;
 
 var maxSimulatedAtTime = 200;
 
-var tool = 0;
+var tool = 1;
 
 function init() {
     player = new Player();
@@ -64,7 +64,8 @@ function updateCursor() {
 
     if (mouse.down) {
         //mouse.down = false;
-        for (let i = 0; i < Math.pow(MOUSESIZE, 2); i++) {
+        let area = Math.pow(MOUSESIZE, 2);
+        for (let i = 0; i < area; i++) {
             let x = ~~(mouse.x + ~~(i / MOUSESIZE) - ~~(MOUSESIZE / 2 - player.x));
             let y = ~~(mouse.y + i % MOUSESIZE - ~~(MOUSESIZE / 2 - player.y))
 
@@ -76,18 +77,29 @@ function updateCursor() {
 
 
             if (!chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)]) {
-                if (tool == 0) {
+                if (tool == 1) {
                     chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new Liquid(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, [10, 10, 255, 255]);
-                } else {
+                } else if (tool == 2) {
                     chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new MovableSolid(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, [200, 200, 150, 255]);
                 }
 
                 chunks[`${chunkX},${chunkY}`].updateFrameBuffer();
                 chunks[`${chunkX},${chunkY}`].shouldStepNextFrame = true;
+            } else if (tool == 3) {
+                chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = undefined;
+
+                chunks[`${chunkX},${chunkY}`].updateFrameBuffer();
             }
         }
 
     }
+}
+
+function changeTool(key) {
+    if (key.includes('Digit')) {
+        tool = JSON.parse(key.replaceAll('Digit', ''));
+    }
+
 }
 
 function drawVisibleChunks() {
@@ -273,7 +285,7 @@ class MovableSolid extends Solid {
 class Liquid extends Element {
     constructor(x, y, col) {
         super(x, y, col)
-        this.dispersionRate = 100;
+        this.dispersionRate = 20;
     }
     step() {
         let targetCell = getElementAtCell(this.x, this.y + 1);
@@ -302,15 +314,28 @@ class Liquid extends Element {
     lookHorizontally() {
         let maxLeft = 0;
         let maxRight = 0;
-        for (let i = 1; i < (Math.random() * this.dispersionRate * 2) + 1; i++) {
+        let leftMaxed = false;
+        let rightMaxed = false;
+        let maxAmount = (Math.random() * this.dispersionRate * 2) + 1;
+        for (let i = 1; i < maxAmount; i++) {
             let targetCell1 = getElementAtCell(this.x + i, this.y);
             let targetCell2 = getElementAtCell(this.x - i, this.y);
-            if (targetCell1 == undefined) {
-                maxRight = i
-            } else if (targetCell2 == undefined) {
-                maxLeft = i
-            } else {
-                i = undefined;
+            if (!rightMaxed) {
+                if (targetCell1 == undefined) {
+                    maxRight = i
+                } else {
+                    rightMaxed = true;
+                }
+            }
+            if (!leftMaxed) {
+                if (targetCell2 == undefined && !leftMaxed) {
+                    maxLeft = i
+                } else {
+                    leftMaxed = true;
+                }
+            }
+            if (leftMaxed && rightMaxed) {
+                i = Infinity;
             }
         }
         if (maxLeft !== 0 || maxRight !== 0) {
@@ -356,7 +381,11 @@ function getElementAtCell(x, y) {
     let elementX = ((x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
     let elementY = ((y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
 
-    return chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)];
+    let elementCoordinateValue = elementCoordinate(elementX, elementY);
+
+    let chunkKey = `${chunkX},${chunkY}`;
+
+    return chunks[chunkKey]?.elements[elementCoordinateValue];
 }
 
 function testGenerate(chunkX, chunkY) {
