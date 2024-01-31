@@ -156,7 +156,6 @@ class Chunk {
         this.x = x;
         this.y = y;
         this.frameBuffer = new ImageData(CHUNKSIZE, CHUNKSIZE);
-        this.backFrameBuffer = new ImageData(CHUNKSIZE, CHUNKSIZE);
         this.shouldStep = true;
         this.shouldStepNextFrame = false;
         this.hasStepped = true;
@@ -435,6 +434,7 @@ function testGenerate(chunkX, chunkY) {
                     let offset = randomIntFromRange(0, 6) - 3;
                     if (perlin > 0.5 || Math.abs(x) > chunkX - 1 || Math.abs(y) > chunkX - 1) {
                         chunks[`${x},${y}`].elements[elementCoordinate(elementX, elementY)] = new Solid(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [~~(perlin * 255) + offset, ~~(perlin * 255) + offset, ~~(perlin * 255) + offset, 255]);
+                        chunks[`${x},${y}`].backgroundElements[elementCoordinate(elementX, elementY)] = new Background(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [~~(perlin * 100) + offset * 2, ~~(perlin * 100) + offset * 2, ~~(perlin * 100) + offset * 2, 255]);
                     } else {
                         chunks[`${x},${y}`].backgroundElements[elementCoordinate(elementX, elementY)] = new Background(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [~~(perlin * 255) + offset + 100, ~~(perlin * 255) + offset + 100, ~~(perlin * 255) + offset + 100, 255]);
                     }
