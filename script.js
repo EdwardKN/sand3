@@ -19,7 +19,7 @@ var tool = 1;
 function init() {
     player = new Player();
     fixCanvas();
-    testGenerate(20, 20);
+    //testGenerate(20, 20);
     update();
 }
 async function update() {
@@ -49,6 +49,8 @@ async function update() {
     c.drawText(maxSimulatedAtTime, 10, 40, 10)
 
     c.drawText(particlesOnScreen, 10, 50, 10)
+
+    c.drawText(Object.values(chunks).length, 10, 60, 10)
 
 
     renderC.drawImage(canvas, 0, 0, renderCanvas.width, renderCanvas.height);
@@ -86,26 +88,27 @@ function updateCursor() {
             let elementX = ((x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
             let elementY = ((y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
 
+            if (chunks[`${chunkX},${chunkY}`]) {
+                if (!chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)]) {
+                    if (tool == 1) {
+                        let offset = randomIntFromRange(0, 30) - 15
+                        chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new Liquid(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, [102 + offset, 171 + offset, 230 + offset / 2, 100]);
+                    } else if (tool == 2) {
+                        let offset = randomIntFromRange(0, 20) - 10
+                        chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new MovableSolid(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, [195 + offset, 195 + offset, 145 + offset, 255]);
+                    } else if (tool == 4) {
+                        let offset = randomIntFromRange(0, 30) - 15
+                        mouse.down = false;
+                        particles.push(new Particle(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, [102 + offset, 171 + offset, 230 + offset / 2, 100], { x: randomFloatFromRange(-2, 2), y: randomFloatFromRange(-2, -1) }))
+                    }
 
-            if (!chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)]) {
-                if (tool == 1) {
-                    let offset = randomIntFromRange(0, 30) - 15
-                    chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new Liquid(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, [102 + offset, 171 + offset, 230 + offset / 2, 100]);
-                } else if (tool == 2) {
-                    let offset = randomIntFromRange(0, 20) - 10
-                    chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new MovableSolid(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, [195 + offset, 195 + offset, 145 + offset, 255]);
-                } else if (tool == 4) {
-                    let offset = randomIntFromRange(0, 30) - 15
-                    mouse.down = false;
-                    particles.push(new Particle(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, [102 + offset, 171 + offset, 230 + offset / 2, 100], { x: randomFloatFromRange(-2, 2), y: randomFloatFromRange(-2, -1) }))
+                    chunks[`${chunkX},${chunkY}`].updateFrameBuffer();
+                    chunks[`${chunkX},${chunkY}`].shouldStepNextFrame = true;
+                } else if (tool == 3) {
+                    chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = undefined;
+
+                    chunks[`${chunkX},${chunkY}`].updateFrameBuffer();
                 }
-
-                chunks[`${chunkX},${chunkY}`].updateFrameBuffer();
-                chunks[`${chunkX},${chunkY}`].shouldStepNextFrame = true;
-            } else if (tool == 3) {
-                chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = undefined;
-
-                chunks[`${chunkX},${chunkY}`].updateFrameBuffer();
             }
         }
 
@@ -120,8 +123,8 @@ function changeTool(key) {
 }
 
 function drawVisibleChunks() {
-    for (let x = -1; x < STANDARDX * RENDERSCALE / CHUNKSIZE + 1; x++) {
-        for (let y = -1; y < STANDARDY * RENDERSCALE / CHUNKSIZE + 1; y++) {
+    for (let x = -2; x < STANDARDX * RENDERSCALE / CHUNKSIZE + 1; x++) {
+        for (let y = -2; y < STANDARDY * RENDERSCALE / CHUNKSIZE + 1; y++) {
             let chunk = chunks[`${x + ~~(player.x / CHUNKSIZE)},${y + ~~(player.y / CHUNKSIZE)}`];
             if (chunk) {
                 c.putImageData(chunk.frameBuffer, x * CHUNKSIZE - player.x % CHUNKSIZE, y * CHUNKSIZE - player.y % CHUNKSIZE)
@@ -131,6 +134,24 @@ function drawVisibleChunks() {
                 //c.strokeRect(x * CHUNKSIZE - player.x % CHUNKSIZE, y * CHUNKSIZE - player.y % CHUNKSIZE, CHUNKSIZE, CHUNKSIZE)
 
                 //c.drawText(`${x + ~~(player.x / CHUNKSIZE)},${y + ~~(player.y / CHUNKSIZE)}`, x * CHUNKSIZE - player.x % CHUNKSIZE + CHUNKSIZE / 2, y * CHUNKSIZE - player.y % CHUNKSIZE + CHUNKSIZE / 2)
+            } else {
+                createNewChunk(x + ~~(player.x / CHUNKSIZE), y + ~~(player.y / CHUNKSIZE))
+            }
+        }
+    }
+}
+
+function createNewChunk(x, y) {
+    chunks[`${x},${y}`] = new Chunk(x, y)
+    for (let elementX = 0; elementX < CHUNKSIZE; elementX++) {
+        for (let elementY = 0; elementY < CHUNKSIZE; elementY++) {
+            let perlin = getPerlinLayers(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, 20, [100, 50], [5, 1])
+            let offset = randomIntFromRange(0, 6) - 3 - 50;
+            if (perlin > 0.5) {
+                chunks[`${x},${y}`].elements[elementCoordinate(elementX, elementY)] = new Solid(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [~~(perlin * 255) + offset, ~~(perlin * 255) + offset, ~~(perlin * 255) + offset, 255]);
+                chunks[`${x},${y}`].backgroundElements[elementCoordinate(elementX, elementY)] = new Background(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [~~(perlin * 255) + offset + 50, ~~(perlin * 255) + offset + 50, ~~(perlin * 255) + offset + 50, 255]);
+            } else {
+                chunks[`${x},${y}`].backgroundElements[elementCoordinate(elementX, elementY)] = new Background(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [~~(perlin * 255) + offset + 100, ~~(perlin * 255) + offset + 100, ~~(perlin * 255) + offset + 100, 255]);
             }
         }
     }
@@ -291,11 +312,19 @@ class Particle {
 
         let chunkX = ~~((this.drawX - (this.drawX < 0 ? -1 : 0)) / CHUNKSIZE) + (this.drawX < 0 ? -1 : 0);
         let chunkY = ~~((this.drawY - (this.drawY < 0 ? -1 : 0)) / CHUNKSIZE) + (this.drawY < 0 ? -1 : 0);
+
+        if (!chunks[`${chunkX},${chunkY}`]) { createNewChunk(chunkX, chunkY) }
         chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
-        chunks[`${chunkX - 1},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
-        chunks[`${chunkX},${chunkY - 1}`].hasUpdatedSinceFrameBufferChange = true;
-        chunks[`${chunkX + 1},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
-        chunks[`${chunkX},${chunkY + 1}`].hasUpdatedSinceFrameBufferChange = true;
+
+        if (!chunks[`${chunkX + 1},${chunkY}`]) { createNewChunk(chunkX + 1, chunkY) }
+        if (!chunks[`${chunkX - 1},${chunkY}`]) { createNewChunk(chunkX - 1, chunkY) }
+        if (!chunks[`${chunkX},${chunkY + 1}`]) { createNewChunk(chunkX, chunkY + 1) }
+        if (!chunks[`${chunkX},${chunkY - 1}`]) { createNewChunk(chunkX, chunkY - 1) }
+
+        if (chunks[`${chunkX - 1},${chunkY}`]) chunks[`${chunkX - 1},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
+        if (chunks[`${chunkX + 1},${chunkY}`]) chunks[`${chunkX + 1},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
+        if (chunks[`${chunkX},${chunkY - 1}`]) chunks[`${chunkX},${chunkY - 1}`].hasUpdatedSinceFrameBufferChange = true;
+        if (chunks[`${chunkX},${chunkY + 1}`]) chunks[`${chunkX},${chunkY + 1}`].hasUpdatedSinceFrameBufferChange = true;
 
         if (getElementAtCell(this.drawX, this.drawY) !== undefined) {
             this.x -= this.vel.x;
@@ -317,7 +346,7 @@ class Particle {
 
         let elementX = ((this.drawX % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
         let elementY = ((this.drawY % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-
+        if (!chunks[`${chunkX},${chunkY}`]) { createNewChunk(chunkX, chunkY) }
         chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new Liquid(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col);
         chunks[`${chunkX},${chunkY}`].updateFrameBuffer();
         chunks[`${chunkX},${chunkY}`].shouldStepNextFrame = true;
@@ -350,6 +379,9 @@ class Element {
 
         let elementOnNewPos = getElementAtCell(x, y);
 
+        if (!chunks[`${chunkX},${chunkY}`]) { createNewChunk(chunkX, chunkY) }
+        if (!chunks[`${newChunkX},${newChunkY}`]) { createNewChunk(newChunkX, newChunkY) }
+
         if (elementOnNewPos) {
             elementOnNewPos.x = this.x;
             elementOnNewPos.y = this.y;
@@ -364,6 +396,11 @@ class Element {
 
         chunks[`${newChunkX},${newChunkY}`].shouldStepNextFrame = true;
         chunks[`${chunkX},${chunkY}`].shouldStepNextFrame = true;
+
+        if (!chunks[`${chunkX + 1},${chunkY}`]) { createNewChunk(chunkX + 1, chunkY) }
+        if (!chunks[`${chunkX - 1},${chunkY}`]) { createNewChunk(chunkX - 1, chunkY) }
+        if (!chunks[`${chunkX},${chunkY + 1}`]) { createNewChunk(chunkX, chunkY + 1) }
+        if (!chunks[`${chunkX},${chunkY - 1}`]) { createNewChunk(chunkX, chunkY - 1) }
 
         chunks[`${chunkX + 1},${chunkY}`].shouldStepNextFrame = true;
         chunks[`${chunkX - 1},${chunkY}`].shouldStepNextFrame = true;
