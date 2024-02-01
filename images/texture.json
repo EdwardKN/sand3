@@ -24,6 +24,31 @@
         "x": 0.5,
         "y": 0.5
       }
+    },
+    {
+      "filename": "textures/stone2.png",
+      "frame": {
+        "x": 131,
+        "y": 1,
+        "w": 128,
+        "h": 128
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 128
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 128
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      }
     }
   ],
   "meta": {
@@ -32,7 +57,7 @@
     "image": "texture.png",
     "format": "RGBA8888",
     "size": {
-      "w": 130,
+      "w": 260,
       "h": 130
     },
     "scale": 1

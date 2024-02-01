@@ -22,7 +22,6 @@ async function init() {
     await new Promise(e => setTimeout(e, 500));
     player = new Player();
     fixCanvas();
-    //testGenerate(20, 20);
     update();
 }
 async function update() {
@@ -149,15 +148,15 @@ function createNewChunk(x, y) {
     for (let elementX = 0; elementX < CHUNKSIZE; elementX++) {
         for (let elementY = 0; elementY < CHUNKSIZE; elementY++) {
             let perlin = getPerlinLayers(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, 20, [100, 50], [5, 1])
-            let offset = randomIntFromRange(0, 6) - 3 - 50;
             let texX = ((((x * CHUNKSIZE + elementX) % TEXTURESIZE) + TEXTURESIZE) % TEXTURESIZE);
             let texY = ((((y * CHUNKSIZE + elementY) % TEXTURESIZE) + TEXTURESIZE) % TEXTURESIZE);
             let texData = getWholeImageDataFromSpriteSheet(images.textures.stone, texX, texY)
+            chunks[`${x},${y}`].backgroundElements[elementCoordinate(elementX, elementY)] = new Background(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [images.imageData.data[texData] - 25 + ~~(perlin * 50), images.imageData.data[texData + 1] - 25 + ~~(perlin * 50), images.imageData.data[texData + 2] - 25 + ~~(perlin * 50), 255]);
             if (perlin > 0.5) {
-                chunks[`${x},${y}`].elements[elementCoordinate(elementX, elementY)] = new Solid(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [images.imageData.data[texData] - 170 + ~~(perlin * 100), images.imageData.data[texData + 1] - 170 + ~~(perlin * 100), images.imageData.data[texData + 2] - 170 + ~~(perlin * 100), 255])
-                chunks[`${x},${y}`].backgroundElements[elementCoordinate(elementX, elementY)] = new Background(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [images.imageData.data[texData] - 200 + ~~(perlin * 100), images.imageData.data[texData + 1] - 200 + ~~(perlin * 100), images.imageData.data[texData + 2] - 200 + ~~(perlin * 100), 255]);
-            } else {
-                chunks[`${x},${y}`].backgroundElements[elementCoordinate(elementX, elementY)] = new Background(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [images.imageData.data[texData] - 50 + ~~((perlin + 0.5) * 50), images.imageData.data[texData + 1] - 50 + ~~((perlin + 0.5) * 50), images.imageData.data[texData + 2] - 50 + ~~((perlin + 0.5) * 50), 255]);
+
+                let texData2 = getWholeImageDataFromSpriteSheet(images.textures.stone2, texX, texY)
+
+                chunks[`${x},${y}`].elements[elementCoordinate(elementX, elementY)] = new Solid(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [images.imageData.data[texData2] - 150 + ~~(perlin * 100), images.imageData.data[texData2 + 1] - 150 + ~~(perlin * 100), images.imageData.data[texData2 + 2] - 150 + ~~(perlin * 100), 255])
             }
         }
     }
@@ -193,7 +192,7 @@ async function updateChunks() {
         e.shiftShouldStepAndReset()
     });
     if (chunkAmount == maxSimulatedAtTime) {
-        if (fps > 58) {
+        if (fps > 55) {
             maxSimulatedAtTime++;
         }
     }
@@ -301,6 +300,10 @@ class Particle {
         this.y = y;
         this.drawX = x;
         this.drawY = y;
+
+        this.oldDrawX = undefined;
+        this.oldDrawY = undefined;
+
         this.col = col;
 
         this.gravity = 0.1;
@@ -315,35 +318,39 @@ class Particle {
 
         this.drawX = ~~this.x;
         this.drawY = ~~this.y;
+        if (this.drawX !== this.oldDrawX || this.drawY !== this.oldDrawY) {
+            this.oldDrawX = this.drawX;
+            this.oldDrawY = this.drawY;
 
-        let chunkX = ~~((this.drawX - (this.drawX < 0 ? -1 : 0)) / CHUNKSIZE) + (this.drawX < 0 ? -1 : 0);
-        let chunkY = ~~((this.drawY - (this.drawY < 0 ? -1 : 0)) / CHUNKSIZE) + (this.drawY < 0 ? -1 : 0);
+            let chunkX = ~~((this.drawX - (this.drawX < 0 ? -1 : 0)) / CHUNKSIZE) + (this.drawX < 0 ? -1 : 0);
+            let chunkY = ~~((this.drawY - (this.drawY < 0 ? -1 : 0)) / CHUNKSIZE) + (this.drawY < 0 ? -1 : 0);
 
-        if (!chunks[`${chunkX},${chunkY}`]) { createNewChunk(chunkX, chunkY) }
-        chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
+            if (!chunks[`${chunkX},${chunkY}`]) { createNewChunk(chunkX, chunkY) }
+            chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
 
-        if (!chunks[`${chunkX + 1},${chunkY}`]) { createNewChunk(chunkX + 1, chunkY) }
-        if (!chunks[`${chunkX - 1},${chunkY}`]) { createNewChunk(chunkX - 1, chunkY) }
-        if (!chunks[`${chunkX},${chunkY + 1}`]) { createNewChunk(chunkX, chunkY + 1) }
-        if (!chunks[`${chunkX},${chunkY - 1}`]) { createNewChunk(chunkX, chunkY - 1) }
+            if (!chunks[`${chunkX + 1},${chunkY}`]) { createNewChunk(chunkX + 1, chunkY) }
+            if (!chunks[`${chunkX - 1},${chunkY}`]) { createNewChunk(chunkX - 1, chunkY) }
+            if (!chunks[`${chunkX},${chunkY + 1}`]) { createNewChunk(chunkX, chunkY + 1) }
+            if (!chunks[`${chunkX},${chunkY - 1}`]) { createNewChunk(chunkX, chunkY - 1) }
 
-        if (chunks[`${chunkX - 1},${chunkY}`]) chunks[`${chunkX - 1},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
-        if (chunks[`${chunkX + 1},${chunkY}`]) chunks[`${chunkX + 1},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
-        if (chunks[`${chunkX},${chunkY - 1}`]) chunks[`${chunkX},${chunkY - 1}`].hasUpdatedSinceFrameBufferChange = true;
-        if (chunks[`${chunkX},${chunkY + 1}`]) chunks[`${chunkX},${chunkY + 1}`].hasUpdatedSinceFrameBufferChange = true;
+            if (chunks[`${chunkX - 1},${chunkY}`]) chunks[`${chunkX - 1},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
+            if (chunks[`${chunkX + 1},${chunkY}`]) chunks[`${chunkX + 1},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
+            if (chunks[`${chunkX},${chunkY - 1}`]) chunks[`${chunkX},${chunkY - 1}`].hasUpdatedSinceFrameBufferChange = true;
+            if (chunks[`${chunkX},${chunkY + 1}`]) chunks[`${chunkX},${chunkY + 1}`].hasUpdatedSinceFrameBufferChange = true;
 
-        if (getElementAtCell(this.drawX, this.drawY) !== undefined) {
-            this.x -= this.vel.x;
-            this.y -= this.vel.y;
-            this.drawX = ~~this.x;
-            this.drawY = ~~this.y;
-
-            while (getElementAtCell(this.drawX, this.drawY) !== undefined) {
-                this.y -= 1;
+            if (getElementAtCell(this.drawX, this.drawY) !== undefined) {
+                this.x -= this.vel.x;
+                this.y -= this.vel.y;
+                this.drawX = ~~this.x;
                 this.drawY = ~~this.y;
-            }
 
-            this.convertToElement();
+                while (getElementAtCell(this.drawX, this.drawY) !== undefined) {
+                    this.y -= 1;
+                    this.drawY = ~~this.y;
+                }
+
+                this.convertToElement();
+            }
         }
     }
     convertToElement() {
@@ -586,27 +593,6 @@ function getElementAtCell(x, y) {
     let chunkKey = `${chunkX},${chunkY}`;
 
     return chunks[chunkKey]?.elements[elementCoordinateValue];
-}
-
-function testGenerate(chunkX, chunkY) {
-    for (let x = -chunkX; x <= chunkX; x++) {
-        for (let y = -chunkY; y <= chunkY; y++) {
-            chunks[`${x},${y}`] = new Chunk(x, y)
-            for (let elementX = 0; elementX < CHUNKSIZE; elementX++) {
-                for (let elementY = 0; elementY < CHUNKSIZE; elementY++) {
-                    let perlin = getPerlinLayers(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, 20, [100, 50], [5, 1])
-                    let offset = randomIntFromRange(0, 6) - 3 - 50;
-                    if (perlin > 0.5 || Math.abs(x) > chunkX - 1 || Math.abs(y) > chunkX - 1) {
-                        chunks[`${x},${y}`].elements[elementCoordinate(elementX, elementY)] = new Solid(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [~~(perlin * 255) + offset, ~~(perlin * 255) + offset, ~~(perlin * 255) + offset, 255]);
-                        chunks[`${x},${y}`].backgroundElements[elementCoordinate(elementX, elementY)] = new Background(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [~~(perlin * 255) + offset + 50, ~~(perlin * 255) + offset + 50, ~~(perlin * 255) + offset + 50, 255]);
-                    } else {
-                        chunks[`${x},${y}`].backgroundElements[elementCoordinate(elementX, elementY)] = new Background(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [~~(perlin * 255) + offset + 100, ~~(perlin * 255) + offset + 100, ~~(perlin * 255) + offset + 100, 255]);
-                    }
-                }
-            }
-        }
-    }
-    Object.values(chunks).forEach(e => e.updateFrameBuffer());
 }
 function getPerlinNoise(x, y, perlinSeed, resolution) {
     noise.seed(perlinSeed);
