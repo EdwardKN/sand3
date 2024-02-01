@@ -1,4 +1,5 @@
 const CHUNKSIZE = 32;
+const TEXTURESIZE = 128;
 
 const TRANS = true;
 
@@ -16,7 +17,9 @@ var particlesOnScreen = 0;
 
 var tool = 1;
 
-function init() {
+async function init() {
+    await loadData();
+    await new Promise(e => setTimeout(e, 500));
     player = new Player();
     fixCanvas();
     //testGenerate(20, 20);
@@ -92,7 +95,7 @@ function updateCursor() {
                 if (!chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)]) {
                     if (tool == 1) {
                         let offset = randomIntFromRange(0, 30) - 15
-                        chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new Liquid(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, [102 + offset, 171 + offset, 230 + offset / 2, 100]);
+                        chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new Liquid(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, [102 + offset, 171 + offset, 230 + offset / 2, 150]);
                     } else if (tool == 2) {
                         let offset = randomIntFromRange(0, 20) - 10
                         chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new MovableSolid(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, [195 + offset, 195 + offset, 145 + offset, 255]);
@@ -147,11 +150,14 @@ function createNewChunk(x, y) {
         for (let elementY = 0; elementY < CHUNKSIZE; elementY++) {
             let perlin = getPerlinLayers(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, 20, [100, 50], [5, 1])
             let offset = randomIntFromRange(0, 6) - 3 - 50;
+            let texX = ((((x * CHUNKSIZE + elementX) % TEXTURESIZE) + TEXTURESIZE) % TEXTURESIZE);
+            let texY = ((((y * CHUNKSIZE + elementY) % TEXTURESIZE) + TEXTURESIZE) % TEXTURESIZE);
+            let texData = getWholeImageDataFromSpriteSheet(images.textures.stone, texX, texY)
             if (perlin > 0.5) {
-                chunks[`${x},${y}`].elements[elementCoordinate(elementX, elementY)] = new Solid(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [~~(perlin * 255) + offset, ~~(perlin * 255) + offset, ~~(perlin * 255) + offset, 255]);
-                chunks[`${x},${y}`].backgroundElements[elementCoordinate(elementX, elementY)] = new Background(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [~~(perlin * 255) + offset + 50, ~~(perlin * 255) + offset + 50, ~~(perlin * 255) + offset + 50, 255]);
+                chunks[`${x},${y}`].elements[elementCoordinate(elementX, elementY)] = new Solid(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [images.imageData.data[texData] - 170 + ~~(perlin * 100), images.imageData.data[texData + 1] - 170 + ~~(perlin * 100), images.imageData.data[texData + 2] - 170 + ~~(perlin * 100), 255])
+                chunks[`${x},${y}`].backgroundElements[elementCoordinate(elementX, elementY)] = new Background(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [images.imageData.data[texData] - 200 + ~~(perlin * 100), images.imageData.data[texData + 1] - 200 + ~~(perlin * 100), images.imageData.data[texData + 2] - 200 + ~~(perlin * 100), 255]);
             } else {
-                chunks[`${x},${y}`].backgroundElements[elementCoordinate(elementX, elementY)] = new Background(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [~~(perlin * 255) + offset + 100, ~~(perlin * 255) + offset + 100, ~~(perlin * 255) + offset + 100, 255]);
+                chunks[`${x},${y}`].backgroundElements[elementCoordinate(elementX, elementY)] = new Background(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [images.imageData.data[texData] - 50 + ~~((perlin + 0.5) * 50), images.imageData.data[texData + 1] - 50 + ~~((perlin + 0.5) * 50), images.imageData.data[texData + 2] - 50 + ~~((perlin + 0.5) * 50), 255]);
             }
         }
     }
@@ -477,9 +483,9 @@ class Liquid extends Element {
             this.lookHorizontally();
         }
         if (getElementAtCell(this.x, this.y - 1) == undefined) {
-            this.drawCol[0] -= 50;
-            this.drawCol[1] -= 50;
-            this.drawCol[2] -= 50;
+            this.drawCol[0] -= 80;
+            this.drawCol[1] -= 80;
+            this.drawCol[2] -= 80;
         }
     }
     lookVertically() {
