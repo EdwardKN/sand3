@@ -3,6 +3,7 @@ const CHUNKSIZE = 32;
 const TRANS = true;
 
 var chunks = {};
+var particles = [];
 var player;
 
 const MOUSESIZE = 10;
@@ -10,6 +11,8 @@ const MOUSESIZE = 10;
 var chunkAmount = 0;
 
 var maxSimulatedAtTime = 200;
+
+var particlesOnScreen = 0;
 
 var tool = 1;
 
@@ -29,17 +32,23 @@ async function update() {
 
     player.update();
 
+    updateParticles();
+
     updateChunks();
 
     drawVisibleChunks();
 
     updateCursor();
 
+    c.drawText(tool, 10, 10, 10)
+
     c.drawText(fps, 10, 20, 10)
 
-    c.drawText(chunkAmount, 10, 40, 10)
+    c.drawText(chunkAmount, 10, 30, 10)
 
-    c.drawText(maxSimulatedAtTime, 10, 60, 10)
+    c.drawText(maxSimulatedAtTime, 10, 40, 10)
+
+    c.drawText(particlesOnScreen, 10, 50, 10)
 
 
     renderC.drawImage(canvas, 0, 0, renderCanvas.width, renderCanvas.height);
@@ -85,6 +94,10 @@ function updateCursor() {
                 } else if (tool == 2) {
                     let offset = randomIntFromRange(0, 20) - 10
                     chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new MovableSolid(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, [195 + offset, 195 + offset, 145 + offset, 255]);
+                } else if (tool == 4) {
+                    let offset = randomIntFromRange(0, 30) - 15
+                    mouse.down = false;
+                    particles.push(new Particle(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, [102 + offset, 171 + offset, 230 + offset / 2, 100], { x: randomFloatFromRange(-2, 2), y: randomFloatFromRange(-2, -1) }))
                 }
 
                 chunks[`${chunkX},${chunkY}`].updateFrameBuffer();
@@ -121,6 +134,18 @@ function drawVisibleChunks() {
             }
         }
     }
+}
+
+function updateParticles() {
+    let filteredParticles = particles.filter(particle => detectCollision(particle.drawX, particle.drawY, 1, 1, ~~(player.x), ~~(player.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE));
+
+    particlesOnScreen = filteredParticles.length
+
+    filteredParticles.forEach(e => e.updatePos());
+
+    let otherParticles = particles.filter(particle => !detectCollision(particle.drawX, particle.drawY, 1, 1, ~~(player.x), ~~(player.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE));
+
+    otherParticles.forEach(particle => particle.convertToElement());
 }
 
 async function updateChunks() {
@@ -176,6 +201,7 @@ class Chunk {
         }
     }
     updateFrameBuffer() {
+        let particlesInChunk = particles.filter(particle => detectCollision(particle.drawX, particle.drawY, 1, 1, this.x * CHUNKSIZE, this.y * CHUNKSIZE, CHUNKSIZE, CHUNKSIZE));
         this.hasUpdatedSinceFrameBufferChange = false;
         for (let x = 0; x < CHUNKSIZE; x++) {
             for (let y = 0; y < CHUNKSIZE; y++) {
@@ -206,6 +232,22 @@ class Chunk {
 
             }
         }
+        particlesInChunk.forEach(particle => {
+            let elementX = ((particle.drawX % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+            let elementY = ((particle.drawY % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+            let coord = elementCoordinate(elementX, elementY);
+            let dataIndex = coord * 4
+            for (let i = 0; i < 3; i++) {
+                let ca = particle?.col[i];
+                let aa = particle?.col[3] / 255;
+                let cb = this.frameBuffer.data[dataIndex + i] || 255;
+                let ab = (this.frameBuffer.data[dataIndex + 3] || 255) / 255;
+                let a0 = aa + ab * (1 - aa);
+
+                this.frameBuffer.data[dataIndex + i] = (ca * aa + cb * ab * (1 - aa)) / a0;
+            }
+            this.frameBuffer.data[dataIndex + 3] = 255;
+        })
     }
     updateElements() {
         this.hasStepped = true;
@@ -220,6 +262,67 @@ class Chunk {
             let element = filteredElements[i];
             element.step();
         }
+    }
+}
+
+class Particle {
+    constructor(x, y, col, startVel = {
+        x: 0,
+        y: 0
+    }) {
+        this.x = x;
+        this.y = y;
+        this.drawX = x;
+        this.drawY = y;
+        this.col = col;
+
+        this.gravity = 0.1;
+
+        this.vel = startVel;
+    }
+    updatePos() {
+        this.vel.y += this.gravity;
+
+        this.x += this.vel.x;
+        this.y += this.vel.y;
+
+        this.drawX = ~~this.x;
+        this.drawY = ~~this.y;
+
+        let chunkX = ~~((this.drawX - (this.drawX < 0 ? -1 : 0)) / CHUNKSIZE) + (this.drawX < 0 ? -1 : 0);
+        let chunkY = ~~((this.drawY - (this.drawY < 0 ? -1 : 0)) / CHUNKSIZE) + (this.drawY < 0 ? -1 : 0);
+        chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
+        chunks[`${chunkX - 1},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
+        chunks[`${chunkX},${chunkY - 1}`].hasUpdatedSinceFrameBufferChange = true;
+        chunks[`${chunkX + 1},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
+        chunks[`${chunkX},${chunkY + 1}`].hasUpdatedSinceFrameBufferChange = true;
+
+        if (getElementAtCell(this.drawX, this.drawY) !== undefined) {
+            this.x -= this.vel.x;
+            this.y -= this.vel.y;
+            this.drawX = ~~this.x;
+            this.drawY = ~~this.y;
+
+            while (getElementAtCell(this.drawX, this.drawY) !== undefined) {
+                this.y -= 1;
+                this.drawY = ~~this.y;
+            }
+
+            this.convertToElement();
+        }
+    }
+    convertToElement() {
+        let chunkX = ~~((this.drawX - (this.drawX < 0 ? -1 : 0)) / CHUNKSIZE) + (this.drawX < 0 ? -1 : 0);
+        let chunkY = ~~((this.drawY - (this.drawY < 0 ? -1 : 0)) / CHUNKSIZE) + (this.drawY < 0 ? -1 : 0);
+
+        let elementX = ((this.drawX % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+        let elementY = ((this.drawY % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+
+        chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new Liquid(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col);
+        chunks[`${chunkX},${chunkY}`].updateFrameBuffer();
+        chunks[`${chunkX},${chunkY}`].shouldStepNextFrame = true;
+
+        particles.splice(particles.indexOf(this), 1)
     }
 }
 
@@ -266,6 +369,16 @@ class Element {
         chunks[`${chunkX - 1},${chunkY}`].shouldStepNextFrame = true;
         chunks[`${chunkX},${chunkY + 1}`].shouldStepNextFrame = true;
         chunks[`${chunkX},${chunkY - 1}`].shouldStepNextFrame = true;
+
+    }
+    convertToParticle(vel = { x: 0, y: 0 }) {
+        let chunkX = ~~((this.x - (this.x < 0 ? -1 : 0)) / CHUNKSIZE) + (this.x < 0 ? -1 : 0);
+        let chunkY = ~~((this.y - (this.y < 0 ? -1 : 0)) / CHUNKSIZE) + (this.y < 0 ? -1 : 0);
+        let elementX = ((this.x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+        let elementY = ((this.y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+        particles.push(new Particle(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col, vel))
+
+        chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = undefined;
 
     }
 }
@@ -315,7 +428,7 @@ class MovableSolid extends Solid {
 class Liquid extends Element {
     constructor(x, y, col) {
         super(x, y, col)
-        this.dispersionRate = 20;
+        this.dispersionRate = 10;
     }
     step() {
         this.drawCol = [...this.col];
@@ -376,9 +489,17 @@ class Liquid extends Element {
         }
         if (maxLeft !== 0 || maxRight !== 0) {
             if (maxLeft > maxRight) {
-                this.moveTo(this.x - maxLeft, this.y)
+                if (maxLeft > this.dispersionRate / 2 && detectCollision(this.x, this.y, 1, 1, ~~(player.x), ~~(player.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
+                    this.convertToParticle({ x: randomFloatFromRange(-1, -0.5), y: randomFloatFromRange(-0.5, -0.2) })
+                } else {
+                    this.moveTo(this.x - maxLeft, this.y)
+                }
             } else if (maxLeft < maxRight) {
-                this.moveTo(this.x + maxRight, this.y)
+                if (maxRight > this.dispersionRate / 2 && detectCollision(this.x, this.y, 1, 1, ~~(player.x), ~~(player.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
+                    this.convertToParticle({ x: randomFloatFromRange(0.5, 1), y: randomFloatFromRange(-0.5, -0.2) })
+                } else {
+                    this.moveTo(this.x + maxRight, this.y)
+                }
             } else {
                 this.moveTo(this.x + maxRight * (~~(Math.random() * 2) || -1), this.y)
             }
@@ -431,7 +552,7 @@ function testGenerate(chunkX, chunkY) {
             for (let elementX = 0; elementX < CHUNKSIZE; elementX++) {
                 for (let elementY = 0; elementY < CHUNKSIZE; elementY++) {
                     let perlin = getPerlinLayers(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, 20, [100, 50], [5, 1])
-                    let offset = randomIntFromRange(0, 6) - 3;
+                    let offset = randomIntFromRange(0, 6) - 3 - 50;
                     if (perlin > 0.5 || Math.abs(x) > chunkX - 1 || Math.abs(y) > chunkX - 1) {
                         chunks[`${x},${y}`].elements[elementCoordinate(elementX, elementY)] = new Solid(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [~~(perlin * 255) + offset, ~~(perlin * 255) + offset, ~~(perlin * 255) + offset, 255]);
                         chunks[`${x},${y}`].backgroundElements[elementCoordinate(elementX, elementY)] = new Background(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [~~(perlin * 255) + offset + 50, ~~(perlin * 255) + offset + 50, ~~(perlin * 255) + offset + 50, 255]);
@@ -464,5 +585,9 @@ function getPerlinLayers(x, y, perlinSeed, resolutions, weights) {
     value /= sum(weights);
     return value;
 }
+
+
+
+
 
 window.onload = init;

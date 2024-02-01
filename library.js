@@ -791,6 +791,10 @@ function randomIntFromRange(min, max, seed) {
     return Math.floor((seed ? mulberry32(seed) : Math.random()) * (max - min + 1) + min)
 };
 
+function randomFloatFromRange(min, max, seed) {
+    return (seed ? mulberry32(seed) : Math.random()) * (max - min + 1) + min
+};
+
 function to_screen_coordinate(x, y) {
     return {
         x: x * 0.5 + y * -0.5,
