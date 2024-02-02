@@ -302,7 +302,7 @@ class Particle {
     constructor(x, y, col, startVel = {
         x: 0,
         y: 0
-    }) {
+    }, type = Liquid) {
         this.x = x;
         this.y = y;
         this.drawX = x;
@@ -317,6 +317,7 @@ class Particle {
 
         this.vel = startVel;
 
+        this.type = type;
     }
     updatePos() {
         this.vel.y += this.gravity;
@@ -358,7 +359,7 @@ class Particle {
 
                 while (getElementAtCell(this.drawX, this.drawY) !== undefined && whileTimes < MAXWHILE) {
                     whileTimes++;
-                    if (getElementAtCell(this.drawX, this.drawY) instanceof Liquid && getElementAtCell(this.drawX, this.drawY - 1) instanceof Liquid || getElementAtCell(this.drawX, this.drawY) instanceof Liquid && getElementAtCell(this.drawX, this.drawY - 1) == undefined) {
+                    if (getElementAtCell(this.drawX, this.drawY) instanceof this.type && getElementAtCell(this.drawX, this.drawY - 1) instanceof this.type || getElementAtCell(this.drawX, this.drawY) instanceof this.type && getElementAtCell(this.drawX, this.drawY - 1) == undefined) {
                         this.y -= 1;
                         this.drawY = ~~this.y;
                     } else {
@@ -367,22 +368,28 @@ class Particle {
                         let maxAmount = 10;
                         let moveUp = false;
                         for (let i = 1; i < maxAmount; i++) {
+                            let random = Math.random();
                             let targetCell1 = getElementAtCell(this.drawX - i, this.drawY);
                             let targetCell2 = getElementAtCell(this.drawX + i, this.drawY);
-                            if (targetCell1 === undefined || targetCell1 instanceof Liquid) {
+                            if (random > 0.5 && (targetCell1 === undefined || targetCell1 instanceof this.type)) {
                                 shortestOkLeft = i;
                                 shortestOkRight = 0;
                                 i = Infinity;
-                            } else if (targetCell2 === undefined || targetCell2 instanceof Liquid) {
+                            } else if (targetCell2 === undefined || targetCell2 instanceof this.type) {
                                 shortestOkLeft = 0;
                                 shortestOkRight = i;
                                 i = Infinity;
+                            } else if (targetCell1 === undefined || targetCell1 instanceof this.type) {
+                                shortestOkLeft = i;
+                                shortestOkRight = 0;
+                                i = Infinity;
                             }
                         }
+                        let random = Math.random();
                         if (moveUp) {
                             this.y -= 1;
                             this.drawY = ~~this.y;
-                        } else if (shortestOkLeft !== 0 && shortestOkLeft !== Infinity) {
+                        } else if (random > 0.5 && (shortestOkLeft !== 0 && shortestOkLeft !== Infinity)) {
                             this.x -= shortestOkLeft;
                             this.drawX = ~~this.x;
                             if (getElementAtCell(this.drawX, this.drawY) === undefined) {
@@ -393,6 +400,15 @@ class Particle {
                             }
                         } else if (shortestOkRight !== 0 && shortestOkRight !== Infinity) {
                             this.x += shortestOkRight;
+                            this.drawX = ~~this.x;
+                            if (getElementAtCell(this.drawX, this.drawY) === undefined) {
+                                break;
+                            } else {
+                                this.y += 1;
+                                this.drawY = ~~this.y;
+                            }
+                        } else if (shortestOkLeft !== 0 && shortestOkLeft !== Infinity) {
+                            this.x -= shortestOkLeft;
                             this.drawX = ~~this.x;
                             if (getElementAtCell(this.drawX, this.drawY) === undefined) {
                                 break;
@@ -418,7 +434,7 @@ class Particle {
         let elementX = ((this.drawX % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
         let elementY = ((this.drawY % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
         if (!chunks[`${chunkX},${chunkY}`]) { createNewChunk(chunkX, chunkY) }
-        chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new Liquid(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col);
+        chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new this.type(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col);
         chunks[`${chunkX},${chunkY}`].updateFrameBuffer();
         chunks[`${chunkX},${chunkY}`].shouldStepNextFrame = true;
 
@@ -460,8 +476,11 @@ class Element {
         } else {
             chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = undefined;
         }
+        this.setNearByToFreeFalling(this.x, this.y);
+
         this.x = x;
         this.y = y;
+        this.setNearByToFreeFalling(x, y);
 
         chunks[`${newChunkX},${newChunkY}`].elements[elementCoordinate(newElementX, newElementY)] = this;
 
@@ -484,8 +503,25 @@ class Element {
         let chunkY = ~~((this.y - (this.y < 0 ? -1 : 0)) / CHUNKSIZE) + (this.y < 0 ? -1 : 0);
         let elementX = ((this.x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
         let elementY = ((this.y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-        particles.push(new Particle(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col, vel))
+        particles.push(new Particle(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col, vel, this.constructor))
         chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = undefined;
+
+    }
+    setNearByToFreeFalling(x, y) {
+        this.setToFreeFalling(x + 1, y)
+        this.setToFreeFalling(x, y + 1)
+        this.setToFreeFalling(x, y - 1)
+        this.setToFreeFalling(x - 1, y)
+    }
+    setToFreeFalling(x, y) {
+        let chunkX = ~~((x - (x < 0 ? -1 : 0)) / CHUNKSIZE) + (x < 0 ? -1 : 0);
+        let chunkY = ~~((y - (y < 0 ? -1 : 0)) / CHUNKSIZE) + (y < 0 ? -1 : 0);
+        let elementX = ((x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+        let elementY = ((y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+        if (chunks[`${chunkX},${chunkY}`]?.elements[elementCoordinate(elementX, elementY)] instanceof MovableSolid) {
+            if (Math.random() > chunks[`${chunkX},${chunkY}`]?.elements[elementCoordinate(elementX, elementY)].inertialResistance) chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)].newFreeFalling = true;
+
+        }
 
     }
 }
@@ -499,12 +535,76 @@ class Solid extends Element {
 }
 
 class MovableSolid extends Solid {
+    constructor(x, y, col) {
+        super(x, y, col)
+        this.velX = 0;
+        this.outFlow = 0.3;
+        this.outFlowFriction = 0.8;
+        this.isFreeFalling = false;
+        this.newFreeFalling = false;
+        this.lastPos = {
+            x: x,
+            y: y
+        };
+        this.inertialResistance = 0.01;
+    }
     step() {
+        this.isFreeFalling = this.newFreeFalling;
         let targetCell = getElementAtCell(this.x, this.y + 1);
         if (targetCell == undefined || targetCell instanceof Liquid) {
             this.lookVertically();
-        } else {
+        } else if (this.isFreeFalling) {
             this.lookDiagonally(~~(Math.random() * 2) || -1, true);
+            this.velX = (~~(Math.random() * 2) || -1) * this.velY * this.outFlow;
+
+        }
+        if (this.velX > 1 || this.velX < -1) {
+            this.lookHorizontally()
+        }
+        this.velX *= (1 - this.outFlowFriction);
+        if (this.lastPos.x !== this.x || this.lastPos.y !== this.y) {
+            this.newFreeFalling = true;
+            this.lastPos.x = this.x;
+            this.lastPos.y = this.y;
+        } else {
+            this.newFreeFalling = false;
+        }
+    }
+    lookHorizontally() {
+        let maxLeft = 0;
+        let maxRight = 0;
+        let leftMaxed = false;
+        let rightMaxed = false;
+        let maxAmount = ~~(this.velX) + 1;
+        for (let i = 1; i < maxAmount; i++) {
+            let targetCell1 = getElementAtCell(this.x + i, this.y);
+            let targetCell2 = getElementAtCell(this.x - i, this.y);
+            if (!rightMaxed) {
+                if ((targetCell1 || targetCell1 instanceof Liquid) == undefined) {
+                    maxRight = i
+                } else {
+                    rightMaxed = true;
+                }
+            }
+            if (!leftMaxed) {
+                if ((targetCell2 == undefined || targetCell2 instanceof Liquid) && !leftMaxed) {
+                    maxLeft = i
+                } else {
+                    leftMaxed = true;
+                }
+            }
+            if (leftMaxed && rightMaxed) {
+                i = Infinity;
+            }
+        }
+        if (maxLeft !== 0 || maxRight !== 0) {
+            if (maxLeft > maxRight) {
+                this.moveTo(this.x - maxLeft, this.y)
+            } else if (maxLeft < maxRight) {
+                this.moveTo(this.x + maxRight, this.y)
+            } else {
+                this.moveTo(this.x + maxRight * (~~(Math.random() * 2) || -1), this.y)
+            }
         }
     }
     lookVertically() {
