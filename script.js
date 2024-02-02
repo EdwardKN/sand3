@@ -1,7 +1,11 @@
 const CHUNKSIZE = 32;
 const TEXTURESIZE = 128;
 
+const SIMULATIONSTEPSPERFRAME = 1;
+
 const TRANS = true;
+
+const FPSTOHOLD = 55;
 
 var chunks = {};
 var particles = [];
@@ -34,9 +38,11 @@ async function update() {
 
     player.update();
 
-    updateParticles();
+    for (let i = 0; i < SIMULATIONSTEPSPERFRAME; i++) {
+        updateParticles();
 
-    updateChunks();
+        updateChunks();
+    }
 
     drawVisibleChunks();
 
@@ -151,7 +157,8 @@ function createNewChunk(x, y) {
             let texX = ((((x * CHUNKSIZE + elementX) % TEXTURESIZE) + TEXTURESIZE) % TEXTURESIZE);
             let texY = ((((y * CHUNKSIZE + elementY) % TEXTURESIZE) + TEXTURESIZE) % TEXTURESIZE);
             let texData = getWholeImageDataFromSpriteSheet(images.textures.stone, texX, texY)
-            chunks[`${x},${y}`].backgroundElements[elementCoordinate(elementX, elementY)] = new Background(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [images.imageData.data[texData] - 25 + ~~(perlin * 50), images.imageData.data[texData + 1] - 25 + ~~(perlin * 50), images.imageData.data[texData + 2] - 25 + ~~(perlin * 50), 255]);
+            chunks[`${x},${y}`].backgroundElements[elementCoordinate(elementX, elementY)] = new Background(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [images.imageData.data[texData] - 50 + ~~(perlin * 150), images.imageData.data[texData + 1] - 50 + ~~(perlin * 150), images.imageData.data[texData + 2] - 50 + ~~(perlin * 150), 255]);
+
             if (perlin > 0.5) {
 
                 let texData2 = getWholeImageDataFromSpriteSheet(images.textures.stone2, texX, texY)
@@ -192,11 +199,11 @@ async function updateChunks() {
         e.shiftShouldStepAndReset()
     });
     if (chunkAmount == maxSimulatedAtTime) {
-        if (fps > 55) {
+        if (fps > FPSTOHOLD) {
             maxSimulatedAtTime++;
         }
     }
-    if (fps < 60) {
+    if (fps < FPSTOHOLD + 5) {
         maxSimulatedAtTime--;
         if (maxSimulatedAtTime < 15) maxSimulatedAtTime = 15;
     }
@@ -309,6 +316,7 @@ class Particle {
         this.gravity = 0.1;
 
         this.vel = startVel;
+
     }
     updatePos() {
         this.vel.y += this.gravity;
@@ -318,6 +326,7 @@ class Particle {
 
         this.drawX = ~~this.x;
         this.drawY = ~~this.y;
+
         if (this.drawX !== this.oldDrawX || this.drawY !== this.oldDrawY) {
             this.oldDrawX = this.drawX;
             this.oldDrawY = this.drawY;
@@ -344,9 +353,58 @@ class Particle {
                 this.drawX = ~~this.x;
                 this.drawY = ~~this.y;
 
-                while (getElementAtCell(this.drawX, this.drawY) !== undefined) {
-                    this.y -= 1;
-                    this.drawY = ~~this.y;
+                let whileTimes = 0;
+                const MAXWHILE = 20;
+
+                while (getElementAtCell(this.drawX, this.drawY) !== undefined && whileTimes < MAXWHILE) {
+                    whileTimes++;
+                    if (getElementAtCell(this.drawX, this.drawY) instanceof Liquid && getElementAtCell(this.drawX, this.drawY - 1) instanceof Liquid || getElementAtCell(this.drawX, this.drawY) instanceof Liquid && getElementAtCell(this.drawX, this.drawY - 1) == undefined) {
+                        this.y -= 1;
+                        this.drawY = ~~this.y;
+                    } else {
+                        let shortestOkLeft = Infinity;
+                        let shortestOkRight = Infinity;
+                        let maxAmount = 10;
+                        let moveUp = false;
+                        for (let i = 1; i < maxAmount; i++) {
+                            let targetCell1 = getElementAtCell(this.drawX - i, this.drawY);
+                            let targetCell2 = getElementAtCell(this.drawX + i, this.drawY);
+                            if (targetCell1 === undefined || targetCell1 instanceof Liquid) {
+                                shortestOkLeft = i;
+                                shortestOkRight = 0;
+                                i = Infinity;
+                            } else if (targetCell2 === undefined || targetCell2 instanceof Liquid) {
+                                shortestOkLeft = 0;
+                                shortestOkRight = i;
+                                i = Infinity;
+                            }
+                        }
+                        if (moveUp) {
+                            this.y -= 1;
+                            this.drawY = ~~this.y;
+                        } else if (shortestOkLeft !== 0 && shortestOkLeft !== Infinity) {
+                            this.x -= shortestOkLeft;
+                            this.drawX = ~~this.x;
+                            if (getElementAtCell(this.drawX, this.drawY) === undefined) {
+                                break;
+                            } else {
+                                this.y += 1;
+                                this.drawY = ~~this.y;
+                            }
+                        } else if (shortestOkRight !== 0 && shortestOkRight !== Infinity) {
+                            this.x += shortestOkRight;
+                            this.drawX = ~~this.x;
+                            if (getElementAtCell(this.drawX, this.drawY) === undefined) {
+                                break;
+                            } else {
+                                this.y += 1;
+                                this.drawY = ~~this.y;
+                            }
+                        } else {
+                            this.y -= 1;
+                            this.drawY = ~~this.y;
+                        }
+                    }
                 }
 
                 this.convertToElement();
@@ -427,7 +485,6 @@ class Element {
         let elementX = ((this.x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
         let elementY = ((this.y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
         particles.push(new Particle(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col, vel))
-
         chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = undefined;
 
     }
@@ -452,24 +509,28 @@ class MovableSolid extends Solid {
     }
     lookVertically() {
         let maxDir = 0;
-        for (let i = 1; i < this.velY + 1; i++) {
+        for (let i = 1; i < ~~this.velY + 1; i++) {
             let targetCell = getElementAtCell(this.x, this.y + i);
             if (targetCell == undefined || targetCell instanceof Liquid) {
-                maxDir = i
+                maxDir = i;
             } else {
                 i = Infinity;
             }
         }
         if (maxDir !== 0) {
-            this.velY++;
-            this.moveTo(this.x, this.y + maxDir)
+            let targetCell = getElementAtCell(this.x, this.y + maxDir);
+
+            this.velY += 0.1;
+            if (targetCell instanceof Liquid) this.velY = Math.min(this.velY, 1);
+
+            this.moveTo(this.x, this.y + maxDir);
         }
     }
     lookDiagonally(dir, first) {
         let targetCell = getElementAtCell(this.x + dir, this.y + 1);
 
         if (targetCell == undefined || targetCell instanceof Liquid) {
-            this.moveTo(this.x + dir, this.y + 1)
+            this.moveTo(this.x + dir, this.y + 1);
         } else if (first == true) {
             this.lookDiagonally(-dir, false);
         }
@@ -497,7 +558,7 @@ class Liquid extends Element {
     }
     lookVertically() {
         let maxDir = 0;
-        for (let i = 1; i < this.velY + 1; i++) {
+        for (let i = 1; i < ~~this.velY + 1; i++) {
             let targetCell = getElementAtCell(this.x, this.y + i);
             if (targetCell == undefined) {
                 maxDir = i
@@ -506,7 +567,7 @@ class Liquid extends Element {
             }
         }
         if (maxDir !== 0) {
-            this.velY++;
+            this.velY += 0.1;
             this.moveTo(this.x, this.y + maxDir)
         }
     }
@@ -515,7 +576,7 @@ class Liquid extends Element {
         let maxRight = 0;
         let leftMaxed = false;
         let rightMaxed = false;
-        let maxAmount = (Math.random() * this.dispersionRate * 2) + 1;
+        let maxAmount = (Math.random() * this.dispersionRate) + 1;
         for (let i = 1; i < maxAmount; i++) {
             let targetCell1 = getElementAtCell(this.x + i, this.y);
             let targetCell2 = getElementAtCell(this.x - i, this.y);
@@ -539,13 +600,13 @@ class Liquid extends Element {
         }
         if (maxLeft !== 0 || maxRight !== 0) {
             if (maxLeft > maxRight) {
-                if (maxLeft > this.dispersionRate / 2 && detectCollision(this.x, this.y, 1, 1, ~~(player.x), ~~(player.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
+                if (maxLeft > this.dispersionRate / 1.5 && detectCollision(this.x, this.y, 1, 1, ~~(player.x), ~~(player.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
                     this.convertToParticle({ x: randomFloatFromRange(-1, -0.5), y: randomFloatFromRange(-0.5, -0.2) })
                 } else {
                     this.moveTo(this.x - maxLeft, this.y)
                 }
             } else if (maxLeft < maxRight) {
-                if (maxRight > this.dispersionRate / 2 && detectCollision(this.x, this.y, 1, 1, ~~(player.x), ~~(player.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
+                if (maxRight > this.dispersionRate / 1.5 && detectCollision(this.x, this.y, 1, 1, ~~(player.x), ~~(player.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
                     this.convertToParticle({ x: randomFloatFromRange(0.5, 1), y: randomFloatFromRange(-0.5, -0.2) })
                 } else {
                     this.moveTo(this.x + maxRight, this.y)
