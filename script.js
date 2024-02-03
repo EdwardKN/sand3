@@ -1,9 +1,4 @@
-const CHUNKSIZE = 32;
-const TEXTURESIZE = 128;
-
 const SIMULATIONSTEPSPERFRAME = 1;
-
-const TRANS = true;
 
 const FPSTOHOLD = 55;
 
@@ -21,6 +16,10 @@ var particlesOnScreen = 0;
 
 var tool = 1;
 
+const WORKERAMOUNT = 16;
+
+var workers = Array(WORKERAMOUNT).fill({ worker: new Worker('./worker.js'), working: false })
+
 async function init() {
     await loadData();
     await new Promise(e => setTimeout(e, 500));
@@ -36,6 +35,7 @@ async function update() {
     renderC.clearRect(0, 0, renderCanvas.width, renderCanvas.height)
     c.clearRect(0, 0, canvas.width, canvas.height);
 
+    let beforeUpdate = performance.now();
     player.update();
 
     for (let i = 0; i < SIMULATIONSTEPSPERFRAME; i++) {
@@ -47,8 +47,9 @@ async function update() {
     drawVisibleChunks();
 
     updateCursor();
+    let afterUpdate = performance.now();
 
-    c.drawText(tool, 10, 10, 10)
+    c.drawText(afterUpdate - beforeUpdate, 10, 10, 10)
 
     c.drawText(fps, 10, 20, 10)
 
@@ -59,6 +60,8 @@ async function update() {
     c.drawText(particlesOnScreen, 10, 50, 10)
 
     c.drawText(Object.values(chunks).length, 10, 60, 10)
+
+    c.drawText(tool, 10, 70, 10)
 
 
     renderC.drawImage(canvas, 0, 0, renderCanvas.width, renderCanvas.height);
@@ -233,54 +236,31 @@ class Chunk {
             this.shouldStepNextFrame = false;
         }
     }
-    updateFrameBuffer() {
+    async updateFrameBuffer() {
         let particlesInChunk = particles.filter(particle => detectCollision(particle.drawX, particle.drawY, 1, 1, this.x * CHUNKSIZE, this.y * CHUNKSIZE, CHUNKSIZE, CHUNKSIZE));
-        this.hasUpdatedSinceFrameBufferChange = false;
-        for (let x = 0; x < CHUNKSIZE; x++) {
-            for (let y = 0; y < CHUNKSIZE; y++) {
-                let coord = elementCoordinate(x, y)
-                let el = this.elements[coord] || undefined;
-                let backgroundEL = this.backgroundElements[coord];
-                let dataIndex = coord * 4
-                if (!el) {
-                    for (let i = 0; i < 4; i++) {
-                        this.frameBuffer.data[dataIndex + i] = backgroundEL?.drawCol[i] || 255;
-                    }
-                } else if (TRANS) {
-                    for (let i = 0; i < 3; i++) {
-                        let ca = el?.drawCol[i];
-                        let aa = el?.drawCol[3] / 255;
-                        let cb = backgroundEL?.drawCol[i] || 255;
-                        let ab = (backgroundEL?.drawCol[3] || 255) / 255;
-                        let a0 = aa + ab * (1 - aa);
+        let useableWorker = undefined;
 
-                        this.frameBuffer.data[dataIndex + i] = (ca * aa + cb * ab * (1 - aa)) / a0;
-                    }
-                    this.frameBuffer.data[dataIndex + 3] = 255;
-                } else {
-                    for (let i = 0; i < 4; i++) {
-                        this.frameBuffer.data[dataIndex + i] = el?.drawCol[i] || 255;
-                    }
-                }
-
-            }
+        if (workers.filter(e => !e.working).length > 0) {
+            workers[0].working = true;
+            useableWorker = workers[0];
+        } else {
+            this.frameBuffer = updateFrameBuffer(this.elements, this.backgroundElements, this.frameBuffer, particlesInChunk)
+            this.hasUpdatedSinceFrameBufferChange = false;
+            return
         }
-        particlesInChunk.forEach(particle => {
-            let elementX = ((particle.drawX % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-            let elementY = ((particle.drawY % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-            let coord = elementCoordinate(elementX, elementY);
-            let dataIndex = coord * 4
-            for (let i = 0; i < 3; i++) {
-                let ca = particle?.col[i];
-                let aa = particle?.col[3] / 255;
-                let cb = this.frameBuffer.data[dataIndex + i] || 255;
-                let ab = (this.frameBuffer.data[dataIndex + 3] || 255) / 255;
-                let a0 = aa + ab * (1 - aa);
 
-                this.frameBuffer.data[dataIndex + i] = (ca * aa + cb * ab * (1 - aa)) / a0;
+        useableWorker.worker.postMessage({ type: "frameBuffer", elements: this.elements, backgroundElements: this.backgroundElements, frameBuffer: this.frameBuffer, particlesInChunk: JSON.parse(JSON.stringify(particlesInChunk)) })
+
+        useableWorker.worker.onmessage = (message) => {
+            if (message.data == "unknownMessageType") {
+            } else {
+                this.frameBuffer = message.data;
             }
-            this.frameBuffer.data[dataIndex + 3] = 255;
-        })
+            useableWorker.working = false;
+            this.hasUpdatedSinceFrameBufferChange = false;
+
+        }
+
     }
     updateElements() {
         this.hasStepped = true;
@@ -538,8 +518,8 @@ class MovableSolid extends Solid {
     constructor(x, y, col) {
         super(x, y, col)
         this.velX = 0;
-        this.outFlow = 0.3;
-        this.outFlowFriction = 0.8;
+        this.outFlow = 0.5;
+        this.outFlowFriction = 0.5;
         this.isFreeFalling = false;
         this.newFreeFalling = false;
         this.lastPos = {
@@ -708,6 +688,7 @@ class Liquid extends Element {
             } else if (maxLeft < maxRight) {
                 if (maxRight > this.dispersionRate / 1.5 && detectCollision(this.x, this.y, 1, 1, ~~(player.x), ~~(player.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
                     this.convertToParticle({ x: randomFloatFromRange(0.5, 1), y: randomFloatFromRange(-0.5, -0.2) })
+
                 } else {
                     this.moveTo(this.x + maxRight, this.y)
                 }
@@ -738,9 +719,7 @@ class Player {
     }
 }
 
-function elementCoordinate(x, y) {
-    return y * CHUNKSIZE + x;
-}
+
 
 function getElementAtCell(x, y) {
     let chunkX = ~~((x - (x < 0 ? -1 : 0)) / CHUNKSIZE) + (x < 0 ? -1 : 0);
