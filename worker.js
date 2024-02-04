@@ -1,9 +1,11 @@
 importScripts("./shared.js")
 
-onmessage = (message) => {
+onmessage = async (message) => {
     let messageData = message.data;
+    //console.log(messageData.type)
     if (messageData.type == "frameBuffer") {
-        postMessage(updateFrameBuffer(messageData.elements, messageData.backgroundElements, messageData.frameBuffer, messageData.particlesInChunk));
+        let frameBuffer = await updateFrameBuffer(messageData.elements, messageData.backgroundElements, messageData.frameBuffer, messageData.particlesInChunk)
+        postMessage(frameBuffer);
     } else if (messageData.type == "getElement") {
         postMessage(getElementAtCellFasterReal(messageData.x, messageData.y, messageData.chunks))
     } else {

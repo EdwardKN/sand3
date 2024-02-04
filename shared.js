@@ -54,26 +54,32 @@ function updateFrameBuffer(elements, backgroundElements, frameBuffer, particlesI
     })
     return frameBuffer;
 }
-function getElementAtCellFaster(x, y, chunks) {
+async function getElementAtCellFaster(x, y, chunks) {
     let useableWorker = undefined;
+    let filteredWorkers = workers.filter(e => !e.working)
+    if (filteredWorkers.length > 0) {
 
-    if (workers.filter(e => !e.working).length > 0) {
-        workers[0].working = true;
-        useableWorker = workers[0];
+        filteredWorkers[0].working = true;
+        useableWorker = filteredWorkers[0];
     } else {
-        return getElementAtCellFasterReal(x, y, chunks)
+        return getElementAtCellFasterReal(x, y, chunks);
+
     }
 
-    useableWorker.worker.postMessage({ type: "getElement", x: x, y: y, chunks: chunks })
+    useableWorker.worker.postMessage({ type: "frameBuffer", elements: this.elements, backgroundElements: this.backgroundElements, frameBuffer: this.frameBuffer, particlesInChunk: JSON.parse(JSON.stringify(particlesInChunk)) })
 
-    useableWorker.worker.onmessage = (message) => {
-        if (message.data == "unknownMessageType") {
-        } else {
-            return message.data;
+    let tmp = await new Promise(resolve => {
+        useableWorker.worker.onmessage = (message) => {
+            useableWorker.working = false;
+
+            if (message.data == "unknownMessageType") {
+            } else {
+                resolve(message.data);
+            }
+
         }
-        useableWorker.working = false;
-
-    }
+    })
+    return tmp;
 }
 
 function getElementAtCellFasterReal(x, y, chunks) {

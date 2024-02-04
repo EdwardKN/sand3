@@ -16,9 +16,13 @@ var particlesOnScreen = 0;
 
 var tool = 1;
 
-const WORKERAMOUNT = 16;
+const WORKERAMOUNT = 4;
 
-var workers = Array(WORKERAMOUNT).fill({ worker: new Worker('./worker.js'), working: false })
+var workers = [];
+
+for (let i = 0; i < WORKERAMOUNT; i++) {
+    workers.push({ worker: new Worker('./worker.js'), working: false })
+}
 
 async function init() {
     await loadData();
@@ -239,10 +243,11 @@ class Chunk {
     updateFrameBuffer() {
         let particlesInChunk = particles.filter(particle => detectCollision(particle.drawX, particle.drawY, 1, 1, this.x * CHUNKSIZE, this.y * CHUNKSIZE, CHUNKSIZE, CHUNKSIZE));
         let useableWorker = undefined;
+        let filteredWorkers = workers.filter(e => !e.working)
+        if (filteredWorkers.length > 0) {
 
-        if (workers.filter(e => !e.working).length > 0) {
-            workers[0].working = true;
-            useableWorker = workers[0];
+            filteredWorkers[0].working = true;
+            useableWorker = filteredWorkers[0];
         } else {
             this.frameBuffer = updateFrameBuffer(this.elements, this.backgroundElements, this.frameBuffer, particlesInChunk)
             this.hasUpdatedSinceFrameBufferChange = false;
@@ -328,7 +333,7 @@ class Particle {
             if (chunks[`${chunkX},${chunkY - 1}`]) chunks[`${chunkX},${chunkY - 1}`].hasUpdatedSinceFrameBufferChange = true;
             if (chunks[`${chunkX},${chunkY + 1}`]) chunks[`${chunkX},${chunkY + 1}`].hasUpdatedSinceFrameBufferChange = true;
 
-            if (getElementAtCellFaster(this.drawX, this.drawY, chunks) !== undefined) {
+            if (getElementAtCell(this.drawX, this.drawY, chunks) !== undefined) {
                 this.x -= this.vel.x;
                 this.y -= this.vel.y;
                 this.drawX = ~~this.x;
@@ -337,9 +342,9 @@ class Particle {
                 let whileTimes = 0;
                 const MAXWHILE = 20;
 
-                while (getElementAtCellFaster(this.drawX, this.drawY, chunks) !== undefined && whileTimes < MAXWHILE) {
+                while (getElementAtCell(this.drawX, this.drawY, chunks) !== undefined && whileTimes < MAXWHILE) {
                     whileTimes++;
-                    if (getElementAtCell(this.drawX, this.drawY) instanceof this.type && getElementAtCell(this.drawX, this.drawY - 1) instanceof this.type || getElementAtCell(this.drawX, this.drawY) instanceof this.type && getElementAtCellFaster(this.drawX, this.drawY - 1, chunks) == undefined) {
+                    if (getElementAtCell(this.drawX, this.drawY) instanceof this.type && getElementAtCell(this.drawX, this.drawY - 1) instanceof this.type || getElementAtCell(this.drawX, this.drawY) instanceof this.type && getElementAtCell(this.drawX, this.drawY - 1, chunks) == undefined) {
                         this.y -= 1;
                         this.drawY = ~~this.y;
                     } else {
@@ -372,7 +377,7 @@ class Particle {
                         } else if (random > 0.5 && (shortestOkLeft !== 0 && shortestOkLeft !== Infinity)) {
                             this.x -= shortestOkLeft;
                             this.drawX = ~~this.x;
-                            if (getElementAtCellFaster(this.drawX, this.drawY, chunks) === undefined) {
+                            if (getElementAtCell(this.drawX, this.drawY, chunks) === undefined) {
                                 break;
                             } else {
                                 this.y += 1;
@@ -381,7 +386,7 @@ class Particle {
                         } else if (shortestOkRight !== 0 && shortestOkRight !== Infinity) {
                             this.x += shortestOkRight;
                             this.drawX = ~~this.x;
-                            if (getElementAtCellFaster(this.drawX, this.drawY, chunks) === undefined) {
+                            if (getElementAtCell(this.drawX, this.drawY, chunks) === undefined) {
                                 break;
                             } else {
                                 this.y += 1;
@@ -390,7 +395,7 @@ class Particle {
                         } else if (shortestOkLeft !== 0 && shortestOkLeft !== Infinity) {
                             this.x -= shortestOkLeft;
                             this.drawX = ~~this.x;
-                            if (getElementAtCellFaster(this.drawX, this.drawY, chunks) === undefined) {
+                            if (getElementAtCell(this.drawX, this.drawY, chunks) === undefined) {
                                 break;
                             } else {
                                 this.y += 1;
@@ -618,7 +623,7 @@ class Liquid extends Element {
         this.dispersionRate = 10;
     }
     async step() {
-        let targetCell = getElementAtCellFaster(this.x, this.y + 1, chunks);
+        let targetCell = getElementAtCell(this.x, this.y + 1, chunks);
         if (targetCell == undefined) {
             this.lookVertically();
         } else {
@@ -629,7 +634,7 @@ class Liquid extends Element {
         // långsam. Ska flyttas till framebufferkod
         this.drawCol = [...this.col];
 
-        if (getElementAtCellFaster(this.x, this.y - 1, chunks) == undefined) {
+        if (getElementAtCell(this.x, this.y - 1, chunks) == undefined) {
             this.drawCol[0] -= 80;
             this.drawCol[1] -= 80;
             this.drawCol[2] -= 80;
@@ -638,7 +643,7 @@ class Liquid extends Element {
     lookVertically() {
         let maxDir = 0;
         for (let i = 1; i < ~~this.velY + 1; i++) {
-            let targetCell = getElementAtCellFaster(this.x, this.y + i, chunks);
+            let targetCell = getElementAtCell(this.x, this.y + i, chunks);
             if (targetCell == undefined) {
                 maxDir = i
             } else {
@@ -657,8 +662,8 @@ class Liquid extends Element {
         let rightMaxed = false;
         let maxAmount = (Math.random() * this.dispersionRate) + 1;
         for (let i = 1; i < maxAmount; i++) {
-            let targetCell1 = getElementAtCellFaster(this.x + i, this.y, chunks);
-            let targetCell2 = getElementAtCellFaster(this.x - i, this.y, chunks);
+            let targetCell1 = getElementAtCell(this.x + i, this.y, chunks);
+            let targetCell2 = getElementAtCell(this.x - i, this.y, chunks);
             if (!rightMaxed) {
                 if (targetCell1 == undefined) {
                     maxRight = i
