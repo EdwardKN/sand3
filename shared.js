@@ -54,4 +54,3 @@ function updateFrameBuffer(elements, backgroundElements, frameBuffer, particlesI
     })
     return frameBuffer;
 }
-

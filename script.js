@@ -113,12 +113,12 @@ function updateCursor() {
                         particles.push(new Particle(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, [102 + offset, 171 + offset, 230 + offset / 2, 100], { x: randomFloatFromRange(-2, 2), y: randomFloatFromRange(-2, -1) }))
                     }
 
-                    chunks[`${chunkX},${chunkY}`].updateFrameBuffer();
+                    chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
                     chunks[`${chunkX},${chunkY}`].shouldStepNextFrame = true;
                 } else if (tool == 3) {
                     chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = undefined;
 
-                    chunks[`${chunkX},${chunkY}`].updateFrameBuffer();
+                    chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
                 }
             }
         }
@@ -415,7 +415,7 @@ class Particle {
         let elementY = ((this.drawY % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
         if (!chunks[`${chunkX},${chunkY}`]) { createNewChunk(chunkX, chunkY) }
         chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new this.type(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col);
-        chunks[`${chunkX},${chunkY}`].updateFrameBuffer();
+        chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
         chunks[`${chunkX},${chunkY}`].shouldStepNextFrame = true;
 
         particles.splice(particles.indexOf(this), 1)
@@ -456,7 +456,6 @@ class Element {
         } else {
             chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = undefined;
         }
-        this.setNearByToFreeFalling(this.x, this.y);
 
         this.x = x;
         this.y = y;
