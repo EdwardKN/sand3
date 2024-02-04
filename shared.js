@@ -54,3 +54,37 @@ function updateFrameBuffer(elements, backgroundElements, frameBuffer, particlesI
     })
     return frameBuffer;
 }
+function getElementAtCellFaster(x, y, chunks) {
+    let useableWorker = undefined;
+
+    if (workers.filter(e => !e.working).length > 0) {
+        workers[0].working = true;
+        useableWorker = workers[0];
+    } else {
+        return getElementAtCellFasterReal(x, y, chunks)
+    }
+
+    useableWorker.worker.postMessage({ type: "getElement", x: x, y: y, chunks: chunks })
+
+    useableWorker.worker.onmessage = (message) => {
+        if (message.data == "unknownMessageType") {
+        } else {
+            return message.data;
+        }
+        useableWorker.working = false;
+
+    }
+}
+
+function getElementAtCellFasterReal(x, y, chunks) {
+    let chunkX = ~~((x - (x < 0 ? -1 : 0)) / CHUNKSIZE) + (x < 0 ? -1 : 0);
+    let chunkY = ~~((y - (y < 0 ? -1 : 0)) / CHUNKSIZE) + (y < 0 ? -1 : 0);
+
+    let elementX = ((x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+    let elementY = ((y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+
+    let elementCoordinateValue = elementCoordinate(elementX, elementY);
+
+    let chunkKey = `${chunkX},${chunkY}`;
+    return chunks[chunkKey]?.elements[elementCoordinateValue];
+}

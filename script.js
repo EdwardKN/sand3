@@ -236,7 +236,7 @@ class Chunk {
             this.shouldStepNextFrame = false;
         }
     }
-    async updateFrameBuffer() {
+    updateFrameBuffer() {
         let particlesInChunk = particles.filter(particle => detectCollision(particle.drawX, particle.drawY, 1, 1, this.x * CHUNKSIZE, this.y * CHUNKSIZE, CHUNKSIZE, CHUNKSIZE));
         let useableWorker = undefined;
 
@@ -328,7 +328,7 @@ class Particle {
             if (chunks[`${chunkX},${chunkY - 1}`]) chunks[`${chunkX},${chunkY - 1}`].hasUpdatedSinceFrameBufferChange = true;
             if (chunks[`${chunkX},${chunkY + 1}`]) chunks[`${chunkX},${chunkY + 1}`].hasUpdatedSinceFrameBufferChange = true;
 
-            if (getElementAtCell(this.drawX, this.drawY) !== undefined) {
+            if (getElementAtCellFaster(this.drawX, this.drawY, chunks) !== undefined) {
                 this.x -= this.vel.x;
                 this.y -= this.vel.y;
                 this.drawX = ~~this.x;
@@ -337,9 +337,9 @@ class Particle {
                 let whileTimes = 0;
                 const MAXWHILE = 20;
 
-                while (getElementAtCell(this.drawX, this.drawY) !== undefined && whileTimes < MAXWHILE) {
+                while (getElementAtCellFaster(this.drawX, this.drawY, chunks) !== undefined && whileTimes < MAXWHILE) {
                     whileTimes++;
-                    if (getElementAtCell(this.drawX, this.drawY) instanceof this.type && getElementAtCell(this.drawX, this.drawY - 1) instanceof this.type || getElementAtCell(this.drawX, this.drawY) instanceof this.type && getElementAtCell(this.drawX, this.drawY - 1) == undefined) {
+                    if (getElementAtCell(this.drawX, this.drawY) instanceof this.type && getElementAtCell(this.drawX, this.drawY - 1) instanceof this.type || getElementAtCell(this.drawX, this.drawY) instanceof this.type && getElementAtCellFaster(this.drawX, this.drawY - 1, chunks) == undefined) {
                         this.y -= 1;
                         this.drawY = ~~this.y;
                     } else {
@@ -372,7 +372,7 @@ class Particle {
                         } else if (random > 0.5 && (shortestOkLeft !== 0 && shortestOkLeft !== Infinity)) {
                             this.x -= shortestOkLeft;
                             this.drawX = ~~this.x;
-                            if (getElementAtCell(this.drawX, this.drawY) === undefined) {
+                            if (getElementAtCellFaster(this.drawX, this.drawY, chunks) === undefined) {
                                 break;
                             } else {
                                 this.y += 1;
@@ -381,7 +381,7 @@ class Particle {
                         } else if (shortestOkRight !== 0 && shortestOkRight !== Infinity) {
                             this.x += shortestOkRight;
                             this.drawX = ~~this.x;
-                            if (getElementAtCell(this.drawX, this.drawY) === undefined) {
+                            if (getElementAtCellFaster(this.drawX, this.drawY, chunks) === undefined) {
                                 break;
                             } else {
                                 this.y += 1;
@@ -390,7 +390,7 @@ class Particle {
                         } else if (shortestOkLeft !== 0 && shortestOkLeft !== Infinity) {
                             this.x -= shortestOkLeft;
                             this.drawX = ~~this.x;
-                            if (getElementAtCell(this.drawX, this.drawY) === undefined) {
+                            if (getElementAtCellFaster(this.drawX, this.drawY, chunks) === undefined) {
                                 break;
                             } else {
                                 this.y += 1;
@@ -459,7 +459,7 @@ class Element {
 
         this.x = x;
         this.y = y;
-        this.setNearByToFreeFalling(x, y);
+        //this.setNearByToFreeFalling(x, y);
 
         chunks[`${newChunkX},${newChunkY}`].elements[elementCoordinate(newElementX, newElementY)] = this;
 
@@ -493,12 +493,9 @@ class Element {
         this.setToFreeFalling(x - 1, y)
     }
     setToFreeFalling(x, y) {
-        let chunkX = ~~((x - (x < 0 ? -1 : 0)) / CHUNKSIZE) + (x < 0 ? -1 : 0);
-        let chunkY = ~~((y - (y < 0 ? -1 : 0)) / CHUNKSIZE) + (y < 0 ? -1 : 0);
-        let elementX = ((x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-        let elementY = ((y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-        if (chunks[`${chunkX},${chunkY}`]?.elements[elementCoordinate(elementX, elementY)] instanceof MovableSolid) {
-            if (Math.random() > chunks[`${chunkX},${chunkY}`]?.elements[elementCoordinate(elementX, elementY)].inertialResistance) chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)].newFreeFalling = true;
+        let el = getElementAtCell(x, y)
+        if (el instanceof MovableSolid) {
+            if (Math.random() > el) el.newFreeFalling = true;
 
         }
 
@@ -620,16 +617,19 @@ class Liquid extends Element {
         super(x, y, col)
         this.dispersionRate = 10;
     }
-    step() {
-        this.drawCol = [...this.col];
-        let targetCell = getElementAtCell(this.x, this.y + 1);
+    async step() {
+        let targetCell = getElementAtCellFaster(this.x, this.y + 1, chunks);
         if (targetCell == undefined) {
             this.lookVertically();
         } else {
             this.velY = 1;
             this.lookHorizontally();
         }
-        if (getElementAtCell(this.x, this.y - 1) == undefined) {
+
+        // långsam. Ska flyttas till framebufferkod
+        this.drawCol = [...this.col];
+
+        if (getElementAtCellFaster(this.x, this.y - 1, chunks) == undefined) {
             this.drawCol[0] -= 80;
             this.drawCol[1] -= 80;
             this.drawCol[2] -= 80;
@@ -638,7 +638,7 @@ class Liquid extends Element {
     lookVertically() {
         let maxDir = 0;
         for (let i = 1; i < ~~this.velY + 1; i++) {
-            let targetCell = getElementAtCell(this.x, this.y + i);
+            let targetCell = getElementAtCellFaster(this.x, this.y + i, chunks);
             if (targetCell == undefined) {
                 maxDir = i
             } else {
@@ -657,8 +657,8 @@ class Liquid extends Element {
         let rightMaxed = false;
         let maxAmount = (Math.random() * this.dispersionRate) + 1;
         for (let i = 1; i < maxAmount; i++) {
-            let targetCell1 = getElementAtCell(this.x + i, this.y);
-            let targetCell2 = getElementAtCell(this.x - i, this.y);
+            let targetCell1 = getElementAtCellFaster(this.x + i, this.y, chunks);
+            let targetCell2 = getElementAtCellFaster(this.x - i, this.y, chunks);
             if (!rightMaxed) {
                 if (targetCell1 == undefined) {
                     maxRight = i
