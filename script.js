@@ -31,8 +31,6 @@ async function init() {
     update();
 }
 async function update() {
-    requestAnimationFrame(update);
-
     renderC.imageSmoothingEnabled = false;
 
     renderC.clearRect(0, 0, renderCanvas.width, renderCanvas.height)
@@ -70,6 +68,8 @@ async function update() {
 
 
     renderC.drawImage(canvas, 0, 0, renderCanvas.width, renderCanvas.height);
+
+    requestAnimationFrame(update);
 
 };
 
@@ -299,13 +299,9 @@ class Chunk {
     updateElements() {
         this.hasStepped = true;
         this.hasUpdatedSinceFrameBufferChange = true;
-        let filteredElements = this.elements.filter(e => (e instanceof MovableSolid || e instanceof Liquid))
+        let filteredElements = shuffle(this.elements.filter(e => (e instanceof MovableSolid || e instanceof Liquid)));
 
-        for (let i = 0; i < filteredElements.length; i += 2) {
-            let element = filteredElements[i];
-            element.step();
-        }
-        for (let i = 1; i < filteredElements.length; i += 2) {
+        for (let i = 0; i < filteredElements.length; i++) {
             let element = filteredElements[i];
             element.step();
         }
@@ -447,10 +443,11 @@ class Particle {
 
         let elementX = ((this.drawX % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
         let elementY = ((this.drawY % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-        if (!chunks[`${chunkX},${chunkY}`]) { createNewChunk(chunkX, chunkY) }
-        chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new this.type(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col);
-        chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
-        chunks[`${chunkX},${chunkY}`].shouldStepNextFrame = true;
+        let chunk = chunks[`${chunkX},${chunkY}`];
+        if (!chunk) { createNewChunk(chunkX, chunkY) }
+        chunk.elements[elementCoordinate(elementX, elementY)] = new this.type(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col);
+        chunk.hasUpdatedSinceFrameBufferChange = true;
+        chunk.shouldStepNextFrame = true;
 
         particles.splice(particles.indexOf(this), 1)
     }
@@ -529,11 +526,15 @@ class Element {
         let chunkY = ~~((y - (y < 0 ? -1 : 0)) / CHUNKSIZE) + (y < 0 ? -1 : 0);
         let elementX = ((x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
         let elementY = ((y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-        if (chunks[`${chunkX},${chunkY}`]?.elements[elementCoordinate(elementX, elementY)] instanceof MovableSolid) {
-            if (Math.random() > chunks[`${chunkX},${chunkY}`]?.elements[elementCoordinate(elementX, elementY)].inertialResistance) chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)].newFreeFalling = true;
-
+        let chunk = chunks[`${chunkX},${chunkY}`];
+        if (chunk) {
+            let el = chunk.elements[elementCoordinate(elementX, elementY)];
+            if (el) {
+                if (el instanceof MovableSolid) {
+                    if (Math.random() > el.inertialResistance) el.newFreeFalling = true;
+                }
+            }
         }
-
     }
 }
 
@@ -681,7 +682,7 @@ class Liquid extends Element {
         let maxRight = 0;
         let leftMaxed = false;
         let rightMaxed = false;
-        let maxAmount = (Math.random() * this.dispersionRate) + 1;
+        let maxAmount = this.dispersionRate;
         for (let i = 1; i < maxAmount; i++) {
             let targetCell1 = getElementAtCell(this.x + i, this.y);
             let targetCell2 = getElementAtCell(this.x - i, this.y);
@@ -706,11 +707,11 @@ class Liquid extends Element {
         if (maxLeft !== 0 || maxRight !== 0) {
             if (maxLeft > maxRight) {
                 if (maxLeft > this.dispersionRate / 2 && detectCollision(this.x, this.y, 1, 1, ~~(player.x), ~~(player.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
-                    this.convertToParticle({ x: randomFloatFromRange(-1, -0.5), y: randomFloatFromRange(-0.5, -0.2) })
+                    this.convertToParticle({ x: -randomFloatFromRange(0.5, 1), y: randomFloatFromRange(-0.5, -0.2) })
                 } else {
                     this.moveTo(this.x - maxLeft, this.y)
                 }
-            } else if (maxLeft < maxRight) {
+            } else if (maxRight > maxLeft) {
                 if (maxRight > this.dispersionRate / 2 && detectCollision(this.x, this.y, 1, 1, ~~(player.x), ~~(player.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
                     this.convertToParticle({ x: randomFloatFromRange(0.5, 1), y: randomFloatFromRange(-0.5, -0.2) })
                 } else {
