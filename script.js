@@ -110,12 +110,12 @@ function updateCursor() {
                         particles.push(new Particle(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, [102 + offset, 171 + offset, 230 + offset / 2, 100], { x: randomFloatFromRange(-2, 2), y: randomFloatFromRange(-2, -1) }))
                     }
 
-                    chunks[`${chunkX},${chunkY}`].updateFrameBuffer();
+                    chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
                     chunks[`${chunkX},${chunkY}`].shouldStepNextFrame = true;
                 } else if (tool == 3) {
                     chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = undefined;
 
-                    chunks[`${chunkX},${chunkY}`].updateFrameBuffer();
+                    chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
                 }
             }
         }
@@ -244,22 +244,36 @@ class Chunk {
                 let dataIndex = coord * 4
                 if (!el) {
                     for (let i = 0; i < 4; i++) {
-                        this.frameBuffer.data[dataIndex + i] = backgroundEL?.drawCol[i] || 255;
+                        this.frameBuffer.data[dataIndex + i] = backgroundEL?.col[i] || 255;
                     }
                 } else if (TRANS) {
-                    for (let i = 0; i < 3; i++) {
-                        let ca = el?.drawCol[i];
-                        let aa = el?.drawCol[3] / 255;
-                        let cb = backgroundEL?.drawCol[i] || 255;
-                        let ab = (backgroundEL?.drawCol[3] || 255) / 255;
-                        let a0 = aa + ab * (1 - aa);
+                    if (el instanceof Liquid) {
+                        let targetCell = elementCoordinate(x, y - 1) > 0 ? (this.elements[elementCoordinate(x, y - 1)]) : chunks[`${this.x},${this.y - 1}`].elements[elementCoordinate(x, CHUNKSIZE - 1)];
 
-                        this.frameBuffer.data[dataIndex + i] = (ca * aa + cb * ab * (1 - aa)) / a0;
+                        for (let i = 0; i < 3; i++) {
+                            let ca = el?.col[i] - ((targetCell == undefined) ? 80 : 0);
+                            let aa = el?.col[3] / 255;
+                            let cb = backgroundEL?.col[i] || 255;
+                            let ab = (backgroundEL?.col[3] || 255) / 255;
+                            let a0 = aa + ab * (1 - aa);
+                            this.frameBuffer.data[dataIndex + i] = (ca * aa + cb * ab * (1 - aa)) / a0;
+                        }
+                    } else {
+                        for (let i = 0; i < 3; i++) {
+                            let ca = el?.col[i];
+                            let aa = el?.col[3] / 255;
+                            let cb = backgroundEL?.col[i] || 255;
+                            let ab = (backgroundEL?.col[3] || 255) / 255;
+                            let a0 = aa + ab * (1 - aa);
+                            this.frameBuffer.data[dataIndex + i] = (ca * aa + cb * ab * (1 - aa)) / a0;
+                        }
                     }
+
+
                     this.frameBuffer.data[dataIndex + 3] = 255;
                 } else {
                     for (let i = 0; i < 4; i++) {
-                        this.frameBuffer.data[dataIndex + i] = el?.drawCol[i] || 255;
+                        this.frameBuffer.data[dataIndex + i] = el?.col[i] || 255;
                     }
                 }
 
@@ -435,7 +449,7 @@ class Particle {
         let elementY = ((this.drawY % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
         if (!chunks[`${chunkX},${chunkY}`]) { createNewChunk(chunkX, chunkY) }
         chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new this.type(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col);
-        chunks[`${chunkX},${chunkY}`].updateFrameBuffer();
+        chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
         chunks[`${chunkX},${chunkY}`].shouldStepNextFrame = true;
 
         particles.splice(particles.indexOf(this), 1)
@@ -447,7 +461,6 @@ class Element {
         this.x = x;
         this.y = y;
         this.col = col;
-        this.drawCol = col;
 
         this.velY = 1;
     }
@@ -642,18 +655,12 @@ class Liquid extends Element {
         this.dispersionRate = 10;
     }
     step() {
-        this.drawCol = [...this.col];
         let targetCell = getElementAtCell(this.x, this.y + 1);
         if (targetCell == undefined) {
             this.lookVertically();
         } else {
             this.velY = 1;
             this.lookHorizontally();
-        }
-        if (getElementAtCell(this.x, this.y - 1) == undefined) {
-            this.drawCol[0] -= 80;
-            this.drawCol[1] -= 80;
-            this.drawCol[2] -= 80;
         }
     }
     lookVertically() {
@@ -700,13 +707,13 @@ class Liquid extends Element {
         }
         if (maxLeft !== 0 || maxRight !== 0) {
             if (maxLeft > maxRight) {
-                if (maxLeft > this.dispersionRate / 1.5 && detectCollision(this.x, this.y, 1, 1, ~~(player.x), ~~(player.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
+                if (maxLeft > this.dispersionRate / 2 && detectCollision(this.x, this.y, 1, 1, ~~(player.x), ~~(player.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
                     this.convertToParticle({ x: randomFloatFromRange(-1, -0.5), y: randomFloatFromRange(-0.5, -0.2) })
                 } else {
                     this.moveTo(this.x - maxLeft, this.y)
                 }
             } else if (maxLeft < maxRight) {
-                if (maxRight > this.dispersionRate / 1.5 && detectCollision(this.x, this.y, 1, 1, ~~(player.x), ~~(player.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
+                if (maxRight > this.dispersionRate / 2 && detectCollision(this.x, this.y, 1, 1, ~~(player.x), ~~(player.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
                     this.convertToParticle({ x: randomFloatFromRange(0.5, 1), y: randomFloatFromRange(-0.5, -0.2) })
                 } else {
                     this.moveTo(this.x + maxRight, this.y)
