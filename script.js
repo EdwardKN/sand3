@@ -15,7 +15,9 @@ const MOUSESIZE = 10;
 
 var chunkAmount = 0;
 
-var maxSimulatedAtTime = 200;
+const MINSIMULATEDATTIME = 15;
+const MAXMAXSIMULATEDATTIME = 200;
+var maxSimulatedAtTime = MAXMAXSIMULATEDATTIME;
 
 var particlesOnScreen = 0;
 
@@ -38,6 +40,8 @@ async function update() {
 
     player.update();
 
+    let per = performance.now();
+
     for (let i = 0; i < SIMULATIONSTEPSPERFRAME; i++) {
         updateParticles();
 
@@ -48,7 +52,9 @@ async function update() {
 
     updateCursor();
 
-    c.drawText(tool, 10, 10, 10)
+    let realPer = performance.now() - per;
+
+    c.drawText(realPer, 10, 10, 10)
 
     c.drawText(fps, 10, 20, 10)
 
@@ -59,6 +65,8 @@ async function update() {
     c.drawText(particlesOnScreen, 10, 50, 10)
 
     c.drawText(Object.values(chunks).length, 10, 60, 10)
+
+    c.drawText(tool, 10, 70, 10)
 
 
     renderC.drawImage(canvas, 0, 0, renderCanvas.width, renderCanvas.height);
@@ -131,8 +139,10 @@ function changeTool(key) {
 }
 
 function drawVisibleChunks() {
-    for (let x = -2; x < STANDARDX * RENDERSCALE / CHUNKSIZE + 1; x++) {
-        for (let y = -2; y < STANDARDY * RENDERSCALE / CHUNKSIZE + 1; y++) {
+    let maxX = STANDARDX * RENDERSCALE / CHUNKSIZE + 1;
+    let maxY = STANDARDY * RENDERSCALE / CHUNKSIZE + 1;
+    for (let x = -2; x < maxX; x++) {
+        for (let y = -2; y < maxY; y++) {
             let chunk = chunks[`${x + ~~(player.x / CHUNKSIZE)},${y + ~~(player.y / CHUNKSIZE)}`];
             if (chunk) {
                 c.putImageData(chunk.frameBuffer, x * CHUNKSIZE - player.x % CHUNKSIZE, y * CHUNKSIZE - player.y % CHUNKSIZE)
@@ -199,13 +209,13 @@ async function updateChunks() {
         e.shiftShouldStepAndReset()
     });
     if (chunkAmount == maxSimulatedAtTime) {
-        if (fps > FPSTOHOLD) {
+        if (fps > FPSTOHOLD && maxSimulatedAtTime < MAXMAXSIMULATEDATTIME) {
             maxSimulatedAtTime++;
         }
     }
     if (fps < FPSTOHOLD + 5) {
         maxSimulatedAtTime--;
-        if (maxSimulatedAtTime < 15) maxSimulatedAtTime = 15;
+        if (maxSimulatedAtTime < MINSIMULATEDATTIME) maxSimulatedAtTime = MINSIMULATEDATTIME;
     }
 }
 
@@ -238,37 +248,27 @@ class Chunk {
         this.hasUpdatedSinceFrameBufferChange = false;
         for (let x = 0; x < CHUNKSIZE; x++) {
             for (let y = 0; y < CHUNKSIZE; y++) {
-                let coord = elementCoordinate(x, y)
+                let coord = elementCoordinate(x, y);
                 let el = this.elements[coord] || undefined;
                 let backgroundEL = this.backgroundElements[coord];
-                let dataIndex = coord * 4
+                let dataIndex = coord * 4;
                 if (!el) {
                     for (let i = 0; i < 4; i++) {
                         this.frameBuffer.data[dataIndex + i] = backgroundEL?.col[i] || 255;
                     }
                 } else if (TRANS) {
+                    let aa = el?.col[3] / 255;
+                    let ab = (backgroundEL?.col[3] || 255) / 255;
+                    let targetCell = true;
                     if (el instanceof Liquid) {
-                        let targetCell = elementCoordinate(x, y - 1) > 0 ? (this.elements[elementCoordinate(x, y - 1)]) : chunks[`${this.x},${this.y - 1}`].elements[elementCoordinate(x, CHUNKSIZE - 1)];
-
-                        for (let i = 0; i < 3; i++) {
-                            let ca = el?.col[i] - ((targetCell == undefined) ? 80 : 0);
-                            let aa = el?.col[3] / 255;
-                            let cb = backgroundEL?.col[i] || 255;
-                            let ab = (backgroundEL?.col[3] || 255) / 255;
-                            let a0 = aa + ab * (1 - aa);
-                            this.frameBuffer.data[dataIndex + i] = (ca * aa + cb * ab * (1 - aa)) / a0;
-                        }
-                    } else {
-                        for (let i = 0; i < 3; i++) {
-                            let ca = el?.col[i];
-                            let aa = el?.col[3] / 255;
-                            let cb = backgroundEL?.col[i] || 255;
-                            let ab = (backgroundEL?.col[3] || 255) / 255;
-                            let a0 = aa + ab * (1 - aa);
-                            this.frameBuffer.data[dataIndex + i] = (ca * aa + cb * ab * (1 - aa)) / a0;
-                        }
+                        targetCell = elementCoordinate(x, y - 1) > 0 ? (this.elements[elementCoordinate(x, y - 1)]) : chunks[`${this.x},${this.y - 1}`].elements[elementCoordinate(x, CHUNKSIZE - 1)];
                     }
-
+                    for (let i = 0; i < 3; i++) {
+                        let ca = el?.col[i] - ((targetCell == undefined) ? 80 : 0);
+                        let cb = backgroundEL?.col[i] || 255;
+                        let a0 = aa + ab * (1 - aa);
+                        this.frameBuffer.data[dataIndex + i] = (ca * aa + cb * ab * (1 - aa)) / a0;
+                    }
 
                     this.frameBuffer.data[dataIndex + 3] = 255;
                 } else {
@@ -283,12 +283,12 @@ class Chunk {
             let elementX = ((particle.drawX % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
             let elementY = ((particle.drawY % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
             let coord = elementCoordinate(elementX, elementY);
-            let dataIndex = coord * 4
+            let dataIndex = coord * 4;
+            let aa = particle?.col[3] / 255;
+            let ab = (this.frameBuffer.data[dataIndex + 3] || 255) / 255;
             for (let i = 0; i < 3; i++) {
                 let ca = particle?.col[i];
-                let aa = particle?.col[3] / 255;
                 let cb = this.frameBuffer.data[dataIndex + i] || 255;
-                let ab = (this.frameBuffer.data[dataIndex + 3] || 255) / 255;
                 let a0 = aa + ab * (1 - aa);
 
                 this.frameBuffer.data[dataIndex + i] = (ca * aa + cb * ab * (1 - aa)) / a0;
@@ -477,7 +477,7 @@ class Element {
         let newElementX = ((x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
         let newElementY = ((y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
 
-        let elementOnNewPos = getElementAtCell(x, y);
+        let elementOnNewPos = chunks[`${newChunkX},${newChunkY}`]?.elements[elementCoordinate(newElementX, newElementY)];
 
         if (!chunks[`${chunkX},${chunkY}`]) { createNewChunk(chunkX, chunkY) }
         if (!chunks[`${newChunkX},${newChunkY}`]) { createNewChunk(newChunkX, newChunkY) }
@@ -489,8 +489,6 @@ class Element {
         } else {
             chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = undefined;
         }
-        this.setNearByToFreeFalling(this.x, this.y);
-
         this.x = x;
         this.y = y;
         this.setNearByToFreeFalling(x, y);
