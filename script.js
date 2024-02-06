@@ -50,6 +50,9 @@ async function update() {
 
     updateCursor();
 
+    player.draw();
+
+
     let realPer = performance.now() - per;
 
     c.drawText(realPer, 10, 10, 10)
@@ -726,21 +729,82 @@ class Liquid extends Element {
 class Player {
     constructor() {
         this.x = 0;
-        this.y = 0;
+        this.y = 20;
+        this.width = 10;
+        this.height = 20;
+        this.vx = 0;
+        this.vy = 0;
+        this.grav = 9.82 / 100;
     }
     update() {
         if (pressedKeys['KeyA']) {
-            this.x -= 3;
+            this.vx -= 0.1;
         }
         if (pressedKeys['KeyD']) {
-            this.x += 3;
+            this.vx += 0.1;
         }
         if (pressedKeys['KeyW']) {
-            this.y -= 3;
+            this.vy -= 0.2;
         }
         if (pressedKeys['KeyS']) {
-            this.y += 3;
+            this.vy += 0.1;
         }
+        this.vx *= 0.98;
+        this.vy *= 0.98;
+
+        this.vy += this.grav;
+
+        this.x += this.vx;
+        this.y += this.vy;
+        this.checkCollision();
+    };
+    checkCollision() {
+        let xValue = ~~(this.x + canvas.width / 2 - this.width / 2);
+        let yValue = ~~(this.y + canvas.height / 2 - this.height / 2);
+        for (let i = 0; i < this.height - 1; i++) {
+            let x = xValue;
+            let y = yValue + i;
+            let el = getElementAtCell(x, y);
+            if (el && !(el instanceof Liquid)) {
+                this.x -= this.vx - 0.01;
+                this.vx = 0;
+            };
+        };
+        for (let i = 0; i < this.width; i++) {
+            let x = xValue + i;
+            let y = yValue;
+            let el = getElementAtCell(x, y);
+            if (el && !(el instanceof Liquid)) {
+                this.y -= this.vy - 0.01;
+                this.vy = 0;
+            } else if (el instanceof Liquid) {
+                this.vy *= 0.95;
+            };
+        };
+        for (let i = 0; i < this.height - 1; i++) {
+            let x = xValue + this.width;
+            let y = yValue + i;
+            let el = getElementAtCell(x, y);
+            if (el && !(el instanceof Liquid)) {
+                this.x -= this.vx + 0.01;
+                this.vx = 0;
+            };
+        };
+        for (let i = 0; i < this.width; i++) {
+            let x = xValue + i;
+            let y = yValue + this.height;
+            let el = getElementAtCell(x, y);
+            if (el && !(el instanceof Liquid)) {
+                this.y -= this.vy + 0.01;
+                this.vy = 0;
+            } else if (el instanceof Liquid) {
+                this.vy *= 0.95;
+            };
+        };
+
+    }
+    draw() {
+        c.strokeRect(canvas.width / 2 - this.width / 2, canvas.height / 2 - this.height / 2, this.width, this.height)
     }
 }
 
