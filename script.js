@@ -170,7 +170,7 @@ function createNewChunk(x, y) {
             let texX = ((((x * CHUNKSIZE + elementX) % TEXTURESIZE) + TEXTURESIZE) % TEXTURESIZE);
             let texY = ((((y * CHUNKSIZE + elementY) % TEXTURESIZE) + TEXTURESIZE) % TEXTURESIZE);
             let texData = getWholeImageDataFromSpriteSheet(images.textures.stone, texX, texY)
-            chunks[`${x},${y}`].backgroundElements[elementCoordinate(elementX, elementY)] = new Background(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [images.imageData.data[texData] - 50 + ~~(perlin * 150), images.imageData.data[texData + 1] - 50 + ~~(perlin * 150), images.imageData.data[texData + 2] - 50 + ~~(perlin * 150), 255]);
+            chunks[`${x},${y}`].backgroundElements[elementCoordinate(elementX, elementY)] = new Background(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [images.imageData.data[texData] - 40 + ~~(perlin * 150), images.imageData.data[texData + 1] - 40 + ~~(perlin * 150), images.imageData.data[texData + 2] - 40 + ~~(perlin * 150), 255]);
 
             if (perlin > 0.5) {
 
@@ -766,7 +766,7 @@ class Player {
             let y = yValue + i;
             let el = getElementAtCell(x, y);
             if (el && !(el instanceof Liquid)) {
-                this.x -= this.vx - 0.01;
+                this.x -= this.vx - 0.1;
                 this.vx = 0;
             };
         };
@@ -775,7 +775,7 @@ class Player {
             let y = yValue;
             let el = getElementAtCell(x, y);
             if (el && !(el instanceof Liquid)) {
-                this.y -= this.vy - 0.01;
+                this.y -= this.vy - 0.1;
                 this.vy = 0;
             } else if (el instanceof Liquid) {
                 this.vy *= 0.95;
@@ -786,7 +786,7 @@ class Player {
             let y = yValue + i;
             let el = getElementAtCell(x, y);
             if (el && !(el instanceof Liquid)) {
-                this.x -= this.vx + 0.01;
+                this.x -= this.vx + 0.1;
                 this.vx = 0;
             };
         };
