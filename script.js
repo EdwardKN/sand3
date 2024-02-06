@@ -804,7 +804,7 @@ class Player {
 
     }
     draw() {
-        c.strokeRect(canvas.width / 2 - this.width / 2, canvas.height / 2 - this.height / 2, this.width, this.height)
+        c.fillRect(canvas.width / 2 - this.width / 2, canvas.height / 2 - this.height / 2, this.width, this.height)
     }
 }
 
