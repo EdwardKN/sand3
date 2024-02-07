@@ -52,10 +52,11 @@ async function update() {
 
     updateCursor();
 
+
+
+    renderC.drawImage(canvas, -scale - (player.camera.x % 1) * scale, -scale - (player.camera.y % 1) * scale, renderCanvas.width + scale * 2, renderCanvas.height + scale * 2);
+
     player.draw();
-
-
-    renderC.drawImage(canvas, -(renderCanvas.width / canvas.width) - (player.camera.x % 1) * (renderCanvas.width / canvas.width), -(renderCanvas.height / canvas.height) - (player.camera.y % 1) * (renderCanvas.height / canvas.height), renderCanvas.width + (renderCanvas.width / canvas.width) * 2, renderCanvas.height + (renderCanvas.height / canvas.height) * 2);
 
     let realPer = performance.now() - per;
 
@@ -749,28 +750,35 @@ class Player {
     constructor() {
         this.x = 0;
         this.y = 20;
-        this.width = 10;
-        this.height = 20;
+        this.width = 2;
+        this.height = 4;
         this.vx = 0;
         this.vy = 0;
         this.grav = 9.82 / 100;
         this.camera = new Camera(this, 0.1);
+        this.speedLoss = 0.97;
+        this.waterLoss = 0.98;
+        this.sideColFactor = 0.5;
+
+        this.sideAcc = 0.1;
+        this.upAcc = 0.2;
+        this.downAcc = 0.1;
     }
     update() {
         if (pressedKeys['KeyA']) {
-            this.vx -= 0.1;
+            this.vx -= this.sideAcc;
         }
         if (pressedKeys['KeyD']) {
-            this.vx += 0.1;
+            this.vx += this.sideAcc;
         }
         if (pressedKeys['KeyW']) {
-            this.vy -= 0.2;
+            this.vy -= this.upAcc;
         }
         if (pressedKeys['KeyS']) {
-            this.vy += 0.1;
+            this.vy += this.downAcc;
         }
-        this.vx *= 0.98;
-        this.vy *= 0.98;
+        this.vx *= this.speedLoss;
+        this.vy *= this.speedLoss;
 
         this.vy += this.grav;
 
@@ -782,7 +790,7 @@ class Player {
     checkCollision() {
         let xValue = ~~(this.x + canvas.width / 2 - this.width / 2);
         let yValue = ~~(this.y + canvas.height / 2 - this.height / 2);
-        for (let i = 0; i < this.height - 1; i++) {
+        for (let i = 0; i < this.height * this.sideColFactor; i++) {
             let x = xValue;
             let y = yValue + i;
             let el = getElementAtCell(x, y);
@@ -796,18 +804,18 @@ class Player {
             let y = yValue;
             let el = getElementAtCell(x, y);
             if (el && !(el instanceof Liquid)) {
-                this.y -= this.vy - 0.1;
+                this.y -= this.vy - 0.01;
                 this.vy = 0;
             } else if (el instanceof Liquid) {
-                this.vy *= 0.95;
+                this.vy *= this.waterLoss;
             };
         };
-        for (let i = 0; i < this.height - 1; i++) {
+        for (let i = 0; i < this.height * this.sideColFactor; i++) {
             let x = xValue + this.width;
             let y = yValue + i;
             let el = getElementAtCell(x, y);
             if (el && !(el instanceof Liquid)) {
-                this.x -= this.vx + 0.1;
+                this.x -= this.vx + 0.01;
                 this.vx = 0;
             };
         };
@@ -816,16 +824,16 @@ class Player {
             let y = yValue + this.height;
             let el = getElementAtCell(x, y);
             if (el && !(el instanceof Liquid)) {
-                this.y -= this.vy + 0.01;
+                this.y -= this.vy + 0.1;
                 this.vy = 0;
             } else if (el instanceof Liquid) {
-                this.vy *= 0.95;
+                this.vy *= this.waterLoss;
             };
         };
 
     }
     draw() {
-        c.fillRect(canvas.width / 2 - this.width / 2 + ~~(this.x - this.camera.x), canvas.height / 2 - this.height / 2 + ~~(this.y - this.camera.y), this.width, this.height)
+        renderC.fillRect((canvas.width / 2 - this.width / 2 + (this.x - this.camera.x)) * scale, (canvas.height / 2 - this.height / 2 + (this.y - this.camera.y)) * scale, this.width * scale, this.height * scale)
     }
 }
 
