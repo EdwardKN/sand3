@@ -5,6 +5,8 @@ const SIMULATIONSTEPSPERFRAME = 1;
 
 const TRANS = true;
 
+const PARTICLERENDER = true;
+
 const FPSTOHOLD = 55;
 
 var chunks = {};
@@ -247,7 +249,6 @@ class Chunk {
         }
     }
     updateFrameBuffer() {
-        let particlesInChunk = particles.filter(particle => detectCollision(particle.drawX, particle.drawY, 1, 1, this.x * CHUNKSIZE, this.y * CHUNKSIZE, CHUNKSIZE, CHUNKSIZE));
         this.hasUpdatedSinceFrameBufferChange = false;
         for (let x = 0; x < CHUNKSIZE; x++) {
             for (let y = 0; y < CHUNKSIZE; y++) {
@@ -282,22 +283,27 @@ class Chunk {
 
             }
         }
-        particlesInChunk.forEach(particle => {
-            let elementX = ((particle.drawX % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-            let elementY = ((particle.drawY % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-            let coord = elementCoordinate(elementX, elementY);
-            let dataIndex = coord * 4;
-            let aa = particle?.col[3] / 255;
-            let ab = (this.frameBuffer.data[dataIndex + 3] || 255) / 255;
-            for (let i = 0; i < 3; i++) {
-                let ca = particle?.col[i];
-                let cb = this.frameBuffer.data[dataIndex + i] || 255;
-                let a0 = aa + ab * (1 - aa);
+        if (PARTICLERENDER) {
+            let particlesInChunk = particles.filter(particle => detectCollision(particle.drawX, particle.drawY, 1, 1, this.x * CHUNKSIZE, this.y * CHUNKSIZE, CHUNKSIZE, CHUNKSIZE));
 
-                this.frameBuffer.data[dataIndex + i] = (ca * aa + cb * ab * (1 - aa)) / a0;
-            }
-            this.frameBuffer.data[dataIndex + 3] = 255;
-        })
+            particlesInChunk.forEach(particle => {
+                let elementX = ((particle.drawX % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+                let elementY = ((particle.drawY % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+                let coord = elementCoordinate(elementX, elementY);
+                let dataIndex = coord * 4;
+                let aa = particle?.col[3] / 255;
+                let ab = (this.frameBuffer.data[dataIndex + 3] || 255) / 255;
+                for (let i = 0; i < 3; i++) {
+                    let ca = particle?.col[i];
+                    let cb = this.frameBuffer.data[dataIndex + i] || 255;
+                    let a0 = aa + ab * (1 - aa);
+
+                    this.frameBuffer.data[dataIndex + i] = (ca * aa + cb * ab * (1 - aa)) / a0;
+                }
+                this.frameBuffer.data[dataIndex + 3] = 255;
+            })
+        }
+
     }
     updateElements() {
         this.hasStepped = true;
@@ -654,7 +660,7 @@ class MovableSolid extends Solid {
 class Liquid extends Element {
     constructor(x, y, col) {
         super(x, y, col)
-        this.dispersionRate = 10;
+        this.dispersionRate = 4;
     }
     step() {
         let targetCell = getElementAtCell(this.x, this.y + 1);
@@ -717,6 +723,7 @@ class Liquid extends Element {
             } else if (maxRight > maxLeft) {
                 if (maxRight > this.dispersionRate / 2 && detectCollision(this.x, this.y, 1, 1, ~~(player.x), ~~(player.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
                     this.convertToParticle({ x: randomFloatFromRange(0.5, 1), y: randomFloatFromRange(-0.5, -0.2) })
+
                 } else {
                     this.moveTo(this.x + maxRight, this.y)
                 }
@@ -752,11 +759,11 @@ class Player {
         this.vx *= 0.98;
         this.vy *= 0.98;
 
-        this.vy += this.grav;
+        //this.vy += this.grav;
 
         this.x += this.vx;
         this.y += this.vy;
-        this.checkCollision();
+        //this.checkCollision();
     };
     checkCollision() {
         let xValue = ~~(this.x + canvas.width / 2 - this.width / 2);
@@ -845,9 +852,5 @@ function getPerlinLayers(x, y, perlinSeed, resolutions, weights) {
     value /= sum(weights);
     return value;
 }
-
-
-
-
 
 window.onload = init;
