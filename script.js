@@ -55,24 +55,23 @@ async function update() {
     player.draw();
 
 
+    renderC.drawImage(canvas, -(renderCanvas.width / canvas.width) - (player.camera.x % 1) * (renderCanvas.width / canvas.width), -(renderCanvas.height / canvas.height) - (player.camera.y % 1) * (renderCanvas.height / canvas.height), renderCanvas.width + (renderCanvas.width / canvas.width) * 2, renderCanvas.height + (renderCanvas.height / canvas.height) * 2);
+
     let realPer = performance.now() - per;
 
-    c.drawText(realPer, 10, 10, 10)
+    renderC.drawText(realPer, 10, 70, 50)
 
-    c.drawText(fps, 10, 20, 10)
+    renderC.drawText(fps, 10, 140, 50)
 
-    c.drawText(chunkAmount, 10, 30, 10)
+    renderC.drawText(chunkAmount, 10, 210, 50)
 
-    c.drawText(maxSimulatedAtTime, 10, 40, 10)
+    renderC.drawText(maxSimulatedAtTime, 10, 280, 50)
 
-    c.drawText(particlesOnScreen, 10, 50, 10)
+    renderC.drawText(particlesOnScreen, 10, 350, 50)
 
-    c.drawText(Object.values(chunks).length, 10, 60, 10)
+    renderC.drawText(Object.values(chunks).length, 10, 420, 50)
 
-    c.drawText(tool, 10, 70, 10)
-
-
-    renderC.drawImage(canvas, 0, 0, renderCanvas.width, renderCanvas.height);
+    renderC.drawText(tool, 10, 490, 10)
 
     requestAnimationFrame(update);
 
@@ -84,8 +83,8 @@ function updateCursor() {
     c.strokeRect(mouse.x - MOUSESIZE / 2, mouse.y - MOUSESIZE / 2, MOUSESIZE, MOUSESIZE);
 
     /*
-    let x = ~~(mouse.x - ~~(MOUSESIZE / 2 - player.x))
-    let y = ~~(mouse.y - ~~(MOUSESIZE / 2 - player.y))
+    let x = ~~(mouse.x - ~~(MOUSESIZE / 2 - player.camera.x))
+    let y = ~~(mouse.y - ~~(MOUSESIZE / 2 - player.camera.y))
 
     let chunkX = ((x - (x < 0 ? -1 : 0)) / CHUNKSIZE) + (x < 0 ? -1 : 0);
     let chunkY = ((y - (y < 0 ? -1 : 0)) / CHUNKSIZE) + (y < 0 ? -1 : 0);
@@ -100,8 +99,8 @@ function updateCursor() {
         //mouse.down = false;
         let area = Math.pow(MOUSESIZE, 2);
         for (let i = 0; i < area; i++) {
-            let x = ~~(mouse.x + ~~(i / MOUSESIZE) - ~~(MOUSESIZE / 2 - player.x));
-            let y = ~~(mouse.y + i % MOUSESIZE - ~~(MOUSESIZE / 2 - player.y))
+            let x = ~~(mouse.x + ~~(i / MOUSESIZE) - ~~(MOUSESIZE / 2 - player.camera.x));
+            let y = ~~(mouse.y + i % MOUSESIZE - ~~(MOUSESIZE / 2 - player.camera.y))
 
             let chunkX = ~~((x - (x < 0 ? -1 : 0)) / CHUNKSIZE) + (x < 0 ? -1 : 0);
             let chunkY = ~~((y - (y < 0 ? -1 : 0)) / CHUNKSIZE) + (y < 0 ? -1 : 0);
@@ -148,17 +147,17 @@ function drawVisibleChunks() {
     let maxY = STANDARDY * RENDERSCALE / CHUNKSIZE + 1;
     for (let x = -2; x < maxX; x++) {
         for (let y = -2; y < maxY; y++) {
-            let chunk = chunks[`${x + ~~(player.x / CHUNKSIZE)},${y + ~~(player.y / CHUNKSIZE)}`];
+            let chunk = chunks[`${x + ~~(player.camera.x / CHUNKSIZE)},${y + ~~(player.camera.y / CHUNKSIZE)}`];
             if (chunk) {
-                c.putImageData(chunk.frameBuffer, x * CHUNKSIZE - player.x % CHUNKSIZE, y * CHUNKSIZE - player.y % CHUNKSIZE)
+                c.putImageData(chunk.frameBuffer, x * CHUNKSIZE - ~~player.camera.x % CHUNKSIZE, y * CHUNKSIZE - ~~player.camera.y % CHUNKSIZE)
                 if (chunk.hasUpdatedSinceFrameBufferChange) {
                     chunk.updateFrameBuffer();
                 }
-                //c.strokeRect(x * CHUNKSIZE - player.x % CHUNKSIZE, y * CHUNKSIZE - player.y % CHUNKSIZE, CHUNKSIZE, CHUNKSIZE)
+                //c.strokeRect(x * CHUNKSIZE - player.camera.x % CHUNKSIZE, y * CHUNKSIZE - player.camera.y % CHUNKSIZE, CHUNKSIZE, CHUNKSIZE)
 
-                //c.drawText(`${x + ~~(player.x / CHUNKSIZE)},${y + ~~(player.y / CHUNKSIZE)}`, x * CHUNKSIZE - player.x % CHUNKSIZE + CHUNKSIZE / 2, y * CHUNKSIZE - player.y % CHUNKSIZE + CHUNKSIZE / 2)
+                //c.drawText(`${x + ~~(player.camera.x / CHUNKSIZE)},${y + ~~(player.camera.y / CHUNKSIZE)}`, x * CHUNKSIZE - player.camera.x % CHUNKSIZE + CHUNKSIZE / 2, y * CHUNKSIZE - player.camera.y % CHUNKSIZE + CHUNKSIZE / 2)
             } else {
-                createNewChunk(x + ~~(player.x / CHUNKSIZE), y + ~~(player.y / CHUNKSIZE))
+                createNewChunk(x + ~~(player.camera.x / CHUNKSIZE), y + ~~(player.camera.y / CHUNKSIZE))
             }
         }
     }
@@ -185,20 +184,20 @@ function createNewChunk(x, y) {
 }
 
 function updateParticles() {
-    let filteredParticles = particles.filter(particle => detectCollision(particle.drawX, particle.drawY, 1, 1, ~~(player.x), ~~(player.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE));
+    let filteredParticles = particles.filter(particle => detectCollision(particle.drawX, particle.drawY, 1, 1, ~~(player.camera.x), ~~(player.camera.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE));
 
     particlesOnScreen = filteredParticles.length
 
     filteredParticles.forEach(e => e.updatePos());
 
-    let otherParticles = particles.filter(particle => !detectCollision(particle.drawX, particle.drawY, 1, 1, ~~(player.x), ~~(player.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE));
+    let otherParticles = particles.filter(particle => !detectCollision(particle.drawX, particle.drawY, 1, 1, ~~(player.camera.x), ~~(player.camera.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE));
 
     otherParticles.forEach(particle => particle.convertToElement());
 }
 
 async function updateChunks() {
     let filteredChunks = Object.values(chunks).filter(e => e.shouldStep);
-    filteredChunks = filteredChunks.sort((a, b) => distance(a.x * CHUNKSIZE - canvas.width / 2, a.y * CHUNKSIZE - canvas.height / 2, player.x, player.y) - distance(b.x * CHUNKSIZE - canvas.width / 2, b.y * CHUNKSIZE - canvas.height / 2, player.x, player.y))
+    filteredChunks = filteredChunks.sort((a, b) => distance(a.x * CHUNKSIZE - canvas.width / 2, a.y * CHUNKSIZE - canvas.height / 2, player.camera.x, player.camera.y) - distance(b.x * CHUNKSIZE - canvas.width / 2, b.y * CHUNKSIZE - canvas.height / 2, player.camera.x, player.camera.y))
     let notStepped = filteredChunks.splice(maxSimulatedAtTime, filteredChunks.length - maxSimulatedAtTime);
     chunkAmount = filteredChunks.length;
     for (let i = 0; i < filteredChunks.length; i += 2) {
@@ -715,13 +714,13 @@ class Liquid extends Element {
         }
         if (maxLeft !== 0 || maxRight !== 0) {
             if (maxLeft > maxRight) {
-                if (maxLeft > this.dispersionRate / 2 && detectCollision(this.x, this.y, 1, 1, ~~(player.x), ~~(player.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
+                if (maxLeft > this.dispersionRate / 2 && detectCollision(this.x, this.y, 1, 1, ~~(player.camera.x), ~~(player.camera.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
                     this.convertToParticle({ x: -randomFloatFromRange(0.5, 1), y: randomFloatFromRange(-0.5, -0.2) })
                 } else {
                     this.moveTo(this.x - maxLeft, this.y)
                 }
             } else if (maxRight > maxLeft) {
-                if (maxRight > this.dispersionRate / 2 && detectCollision(this.x, this.y, 1, 1, ~~(player.x), ~~(player.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
+                if (maxRight > this.dispersionRate / 2 && detectCollision(this.x, this.y, 1, 1, ~~(player.camera.x), ~~(player.camera.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
                     this.convertToParticle({ x: randomFloatFromRange(0.5, 1), y: randomFloatFromRange(-0.5, -0.2) })
 
                 } else {
@@ -733,6 +732,19 @@ class Liquid extends Element {
         }
     }
 }
+
+class Camera {
+    constructor(follow, followFactor) {
+        this.follow = follow;
+        this.x = this.follow.x;
+        this.y = this.follow.y;
+        this.followFactor = followFactor
+    }
+    updatePos() {
+        this.x += (this.follow.x - this.x) * this.followFactor;
+        this.y += (this.follow.y - this.y) * this.followFactor
+    }
+}
 class Player {
     constructor() {
         this.x = 0;
@@ -742,6 +754,7 @@ class Player {
         this.vx = 0;
         this.vy = 0;
         this.grav = 9.82 / 100;
+        this.camera = new Camera(this, 0.1);
     }
     update() {
         if (pressedKeys['KeyA']) {
@@ -759,11 +772,12 @@ class Player {
         this.vx *= 0.98;
         this.vy *= 0.98;
 
-        //this.vy += this.grav;
+        this.vy += this.grav;
 
         this.x += this.vx;
         this.y += this.vy;
-        //this.checkCollision();
+        this.checkCollision();
+        this.camera.updatePos();
     };
     checkCollision() {
         let xValue = ~~(this.x + canvas.width / 2 - this.width / 2);
@@ -811,7 +825,7 @@ class Player {
 
     }
     draw() {
-        c.fillRect(canvas.width / 2 - this.width / 2, canvas.height / 2 - this.height / 2, this.width, this.height)
+        c.fillRect(canvas.width / 2 - this.width / 2 + ~~(this.x - this.camera.x), canvas.height / 2 - this.height / 2 + ~~(this.y - this.camera.y), this.width, this.height)
     }
 }
 
