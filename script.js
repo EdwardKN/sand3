@@ -1,5 +1,6 @@
 const CHUNKSIZE = 32;
 const TEXTURESIZE = 128;
+const ELEMENTSIZE = 2; // gör inget i nuläget. har planer
 
 const SIMULATIONSTEPSPERFRAME = 1;
 
@@ -750,19 +751,22 @@ class Player {
     constructor() {
         this.x = 0;
         this.y = 20;
-        this.width = 2;
-        this.height = 4;
+        this.width = 10;
+        this.height = 20;
         this.vx = 0;
         this.vy = 0;
-        this.grav = 9.82 / 100;
+        this.grav = 9.82 / 130;
         this.camera = new Camera(this, 0.1);
-        this.speedLoss = 0.97;
+        this.sideSpeedLoss = 0.95;
         this.waterLoss = 0.98;
         this.sideColFactor = 0.5;
 
-        this.sideAcc = 0.1;
-        this.upAcc = 0.2;
-        this.downAcc = 0.1;
+        this.sideAcc = 0.05;
+        this.downAcc = 0.05;
+
+        this.jumpPower = 2;
+        this.roofPowerBack = 0.3;
+        this.onGround = false;
     }
     update() {
         if (pressedKeys['KeyA']) {
@@ -771,19 +775,18 @@ class Player {
         if (pressedKeys['KeyD']) {
             this.vx += this.sideAcc;
         }
-        if (pressedKeys['KeyW']) {
-            this.vy -= this.upAcc;
+        if (pressedKeys['KeyW'] && this.onGround) {
+            this.vy = -this.jumpPower;
         }
         if (pressedKeys['KeyS']) {
             this.vy += this.downAcc;
         }
-        this.vx *= this.speedLoss;
-        this.vy *= this.speedLoss;
+        this.vx *= this.sideSpeedLoss;
 
-        this.vy += this.grav;
-
-        this.x += this.vx;
-        this.y += this.vy;
+        if (!this.onGround) { this.vy += this.grav; }
+        if (this.jumping) { this.animateJump(); }
+        this.x += this.vx * deltaTime;
+        this.y += this.vy * deltaTime;
         this.checkCollision();
         this.camera.updatePos();
     };
@@ -805,7 +808,7 @@ class Player {
             let el = getElementAtCell(x, y);
             if (el && !(el instanceof Liquid)) {
                 this.y -= this.vy - 0.01;
-                this.vy = 0;
+                this.vy = -this.vy * this.roofPowerBack;
             } else if (el instanceof Liquid) {
                 this.vy *= this.waterLoss;
             };
@@ -821,7 +824,7 @@ class Player {
         };
         for (let i = 0; i < this.width; i++) {
             let x = xValue + i;
-            let y = yValue + this.height;
+            let y = yValue + this.height - 1;
             let el = getElementAtCell(x, y);
             if (el && !(el instanceof Liquid)) {
                 this.y -= this.vy + 0.1;
@@ -830,6 +833,11 @@ class Player {
                 this.vy *= this.waterLoss;
             };
         };
+        if (getElementAtCell(~~(xValue), ~~(yValue + this.height)) || getElementAtCell(~~(xValue + this.width - 1), ~~(yValue + this.height))) {
+            this.onGround = true;
+        } else {
+            this.onGround = false;
+        }
 
     }
     draw() {
