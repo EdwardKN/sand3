@@ -1,6 +1,8 @@
 const CHUNKSIZE = 32;
 const TEXTURESIZE = 128;
-const ELEMENTSIZE = 2; // gör inget i nuläget. har planer
+const ELEMENTSIZE = 4; // gör inget i nuläget. har planer
+
+const REALCHUNKSIZE = CHUNKSIZE / ELEMENTSIZE;
 
 const SIMULATIONSTEPSPERFRAME = 1;
 
@@ -14,7 +16,7 @@ var chunks = {};
 var particles = [];
 var player;
 
-const MOUSESIZE = 10;
+const MOUSESIZE = 4;
 
 var chunkAmount = 0;
 
@@ -82,17 +84,17 @@ async function update() {
 function updateCursor() {
     c.lineWidth = 1;
     c.strokeStyle = "black";
-    c.strokeRect(mouse.x - MOUSESIZE / 2, mouse.y - MOUSESIZE / 2, MOUSESIZE, MOUSESIZE);
+    c.strokeRect(mouse.x - MOUSESIZE / 2 * ELEMENTSIZE, mouse.y - MOUSESIZE / 2 * ELEMENTSIZE, MOUSESIZE * ELEMENTSIZE, MOUSESIZE * ELEMENTSIZE);
 
     /*
     let x = ~~(mouse.x - ~~(MOUSESIZE / 2 - player.camera.x))
     let y = ~~(mouse.y - ~~(MOUSESIZE / 2 - player.camera.y))
 
-    let chunkX = ((x - (x < 0 ? -1 : 0)) / CHUNKSIZE) + (x < 0 ? -1 : 0);
-    let chunkY = ((y - (y < 0 ? -1 : 0)) / CHUNKSIZE) + (y < 0 ? -1 : 0);
+    let chunkX = ((x - (x < 0 ? -1 : 0)) / REALCHUNKSIZE) + (x < 0 ? -1 : 0);
+    let chunkY = ((y - (y < 0 ? -1 : 0)) / REALCHUNKSIZE) + (y < 0 ? -1 : 0);
 
-    let elementX = ((x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-    let elementY = ((y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+    let elementX = ((x % REALCHUNKSIZE) + REALCHUNKSIZE) % REALCHUNKSIZE;
+    let elementY = ((y % REALCHUNKSIZE) + REALCHUNKSIZE) % REALCHUNKSIZE;
 
     c.drawText(~~chunkY + "      " + ~~elementY, mouse.x, mouse.y)
     */
@@ -101,27 +103,27 @@ function updateCursor() {
         //mouse.down = false;
         let area = Math.pow(MOUSESIZE, 2);
         for (let i = 0; i < area; i++) {
-            let x = ~~(mouse.x + ~~(i / MOUSESIZE) - ~~(MOUSESIZE / 2 - player.camera.x));
-            let y = ~~(mouse.y + i % MOUSESIZE - ~~(MOUSESIZE / 2 - player.camera.y))
+            let x = ~~((mouse.x + ~~(i / MOUSESIZE) - ~~(MOUSESIZE / 2 - player.camera.x))) / ELEMENTSIZE;
+            let y = ~~((mouse.y + i % MOUSESIZE - ~~(MOUSESIZE / 2 - player.camera.y))) / ELEMENTSIZE
 
-            let chunkX = ~~((x - (x < 0 ? -1 : 0)) / CHUNKSIZE) + (x < 0 ? -1 : 0);
-            let chunkY = ~~((y - (y < 0 ? -1 : 0)) / CHUNKSIZE) + (y < 0 ? -1 : 0);
+            let chunkX = ~~((x - (x < 0 ? -1 : 0)) / REALCHUNKSIZE) + (x < 0 ? -1 : 0);
+            let chunkY = ~~((y - (y < 0 ? -1 : 0)) / REALCHUNKSIZE) + (y < 0 ? -1 : 0);
 
-            let elementX = ((x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-            let elementY = ((y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+            let elementX = ((x % REALCHUNKSIZE) + REALCHUNKSIZE) % REALCHUNKSIZE;
+            let elementY = ((y % REALCHUNKSIZE) + REALCHUNKSIZE) % REALCHUNKSIZE;
 
             if (chunks[`${chunkX},${chunkY}`]) {
                 if (!chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)]) {
                     if (tool == 1) {
                         let offset = randomIntFromRange(0, 30) - 15
-                        chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new Liquid(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, [102 + offset, 171 + offset, 230 + offset / 2, 150]);
+                        chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new Liquid(chunkX * REALCHUNKSIZE + elementX, chunkY * REALCHUNKSIZE + elementY, [102 + offset, 171 + offset, 230 + offset / 2, 150]);
                     } else if (tool == 2) {
                         let offset = randomIntFromRange(0, 20) - 10
-                        chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new MovableSolid(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, [195 + offset, 195 + offset, 145 + offset, 255]);
+                        chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new MovableSolid(chunkX * REALCHUNKSIZE + elementX, chunkY * REALCHUNKSIZE + elementY, [195 + offset, 195 + offset, 145 + offset, 255]);
                     } else if (tool == 4) {
                         let offset = randomIntFromRange(0, 30) - 15
                         mouse.down = false;
-                        particles.push(new Particle(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, [102 + offset, 171 + offset, 230 + offset / 2, 100], { x: randomFloatFromRange(-2, 2), y: randomFloatFromRange(-2, -1) }))
+                        particles.push(new Particle(chunkX * REALCHUNKSIZE + elementX, chunkY * REALCHUNKSIZE + elementY, [102 + offset, 171 + offset, 230 + offset / 2, 100], { x: randomFloatFromRange(-2, 2), y: randomFloatFromRange(-2, -1) }))
                     }
 
                     chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
@@ -145,19 +147,19 @@ function changeTool(key) {
 }
 
 function drawVisibleChunks() {
-    let maxX = STANDARDX * RENDERSCALE / CHUNKSIZE + 1;
-    let maxY = STANDARDY * RENDERSCALE / CHUNKSIZE + 1;
+    let maxX = STANDARDX * RENDERSCALE / REALCHUNKSIZE + 1;
+    let maxY = STANDARDY * RENDERSCALE / REALCHUNKSIZE + 1;
     for (let x = -2; x < maxX; x++) {
         for (let y = -2; y < maxY; y++) {
             let chunk = chunks[`${x + ~~(player.camera.x / CHUNKSIZE)},${y + ~~(player.camera.y / CHUNKSIZE)}`];
             if (chunk) {
-                c.putImageData(chunk.frameBuffer, x * CHUNKSIZE - ~~player.camera.x % CHUNKSIZE, y * CHUNKSIZE - ~~player.camera.y % CHUNKSIZE)
+                c.putImageData(chunk.frameBuffer, x * CHUNKSIZE - ~~(player.camera.x) % CHUNKSIZE, y * CHUNKSIZE - ~~(player.camera.y) % CHUNKSIZE)
                 if (chunk.hasUpdatedSinceFrameBufferChange) {
                     chunk.updateFrameBuffer();
                 }
-                //c.strokeRect(x * CHUNKSIZE - player.camera.x % CHUNKSIZE, y * CHUNKSIZE - player.camera.y % CHUNKSIZE, CHUNKSIZE, CHUNKSIZE)
+                //c.strokeRect(x * CHUNKSIZE - (player.camera.x) % CHUNKSIZE, y * CHUNKSIZE - (player.camera.y) % CHUNKSIZE, CHUNKSIZE, CHUNKSIZE)
 
-                //c.drawText(`${x + ~~(player.camera.x / CHUNKSIZE)},${y + ~~(player.camera.y / CHUNKSIZE)}`, x * CHUNKSIZE - player.camera.x % CHUNKSIZE + CHUNKSIZE / 2, y * CHUNKSIZE - player.camera.y % CHUNKSIZE + CHUNKSIZE / 2)
+                //c.drawText(`${x + ~~(player.camera.x / REALCHUNKSIZE)},${y + ~~(player.camera.y / REALCHUNKSIZE)}`, x * REALCHUNKSIZE - player.camera.x % REALCHUNKSIZE + REALCHUNKSIZE / 2, y * REALCHUNKSIZE - player.camera.y % REALCHUNKSIZE + REALCHUNKSIZE / 2)
             } else {
                 createNewChunk(x + ~~(player.camera.x / CHUNKSIZE), y + ~~(player.camera.y / CHUNKSIZE))
             }
@@ -167,19 +169,19 @@ function drawVisibleChunks() {
 
 function createNewChunk(x, y) {
     chunks[`${x},${y}`] = new Chunk(x, y)
-    for (let elementX = 0; elementX < CHUNKSIZE; elementX++) {
-        for (let elementY = 0; elementY < CHUNKSIZE; elementY++) {
-            let perlin = getPerlinLayers(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, 20, [100, 50], [5, 1])
-            let texX = ((((x * CHUNKSIZE + elementX) % TEXTURESIZE) + TEXTURESIZE) % TEXTURESIZE);
-            let texY = ((((y * CHUNKSIZE + elementY) % TEXTURESIZE) + TEXTURESIZE) % TEXTURESIZE);
+    for (let elementX = 0; elementX < REALCHUNKSIZE; elementX++) {
+        for (let elementY = 0; elementY < REALCHUNKSIZE; elementY++) {
+            let perlin = getPerlinLayers(x * REALCHUNKSIZE + elementX, y * REALCHUNKSIZE + elementY, 20, [100, 50], [5, 1])
+            let texX = ((((x * REALCHUNKSIZE + elementX) % TEXTURESIZE) + TEXTURESIZE) % TEXTURESIZE);
+            let texY = ((((y * REALCHUNKSIZE + elementY) % TEXTURESIZE) + TEXTURESIZE) % TEXTURESIZE);
             let texData = getWholeImageDataFromSpriteSheet(images.textures.stone, texX, texY)
-            chunks[`${x},${y}`].backgroundElements[elementCoordinate(elementX, elementY)] = new Background(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [images.imageData.data[texData] - 40 + ~~(perlin * 150), images.imageData.data[texData + 1] - 40 + ~~(perlin * 150), images.imageData.data[texData + 2] - 40 + ~~(perlin * 150), 255]);
+            chunks[`${x},${y}`].backgroundElements[elementCoordinate(elementX, elementY)] = new Background(x * REALCHUNKSIZE + elementX, y * REALCHUNKSIZE + elementY, [images.imageData.data[texData] - 40 + ~~(perlin * 150), images.imageData.data[texData + 1] - 40 + ~~(perlin * 150), images.imageData.data[texData + 2] - 40 + ~~(perlin * 150), 255]);
 
             if (perlin > 0.5) {
 
                 let texData2 = getWholeImageDataFromSpriteSheet(images.textures.stone2, texX, texY)
 
-                chunks[`${x},${y}`].elements[elementCoordinate(elementX, elementY)] = new Solid(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [images.imageData.data[texData2] - 150 + ~~(perlin * 100), images.imageData.data[texData2 + 1] - 150 + ~~(perlin * 100), images.imageData.data[texData2 + 2] - 150 + ~~(perlin * 100), 255])
+                chunks[`${x},${y}`].elements[elementCoordinate(elementX, elementY)] = new Solid(x * REALCHUNKSIZE + elementX, y * REALCHUNKSIZE + elementY, [images.imageData.data[texData2] - 150 + ~~(perlin * 100), images.imageData.data[texData2 + 1] - 150 + ~~(perlin * 100), images.imageData.data[texData2 + 2] - 150 + ~~(perlin * 100), 255])
             }
         }
     }
@@ -199,7 +201,7 @@ function updateParticles() {
 
 async function updateChunks() {
     let filteredChunks = Object.values(chunks).filter(e => e.shouldStep);
-    filteredChunks = filteredChunks.sort((a, b) => distance(a.x * CHUNKSIZE - canvas.width / 2, a.y * CHUNKSIZE - canvas.height / 2, player.camera.x, player.camera.y) - distance(b.x * CHUNKSIZE - canvas.width / 2, b.y * CHUNKSIZE - canvas.height / 2, player.camera.x, player.camera.y))
+    filteredChunks = filteredChunks.sort((a, b) => distance(a.x * REALCHUNKSIZE - canvas.width / 2, a.y * REALCHUNKSIZE - canvas.height / 2, player.camera.x, player.camera.y) - distance(b.x * REALCHUNKSIZE - canvas.width / 2, b.y * REALCHUNKSIZE - canvas.height / 2, player.camera.x, player.camera.y))
     let notStepped = filteredChunks.splice(maxSimulatedAtTime, filteredChunks.length - maxSimulatedAtTime);
     chunkAmount = filteredChunks.length;
     for (let i = 0; i < filteredChunks.length; i += 2) {
@@ -237,12 +239,6 @@ class Chunk {
         this.elements = [];
         this.backgroundElements = [];
     }
-    initElements() {
-        for (let i = 0; i < CHUNKSIZE; i++) {
-            this.elements.push(undefined);
-            this.backgroundElements.push(undefined);
-        }
-    }
     shiftShouldStepAndReset() {
         if (this.hasStepped) {
             this.shouldStep = this.shouldStepNextFrame;
@@ -251,12 +247,14 @@ class Chunk {
     }
     updateFrameBuffer() {
         this.hasUpdatedSinceFrameBufferChange = false;
-        for (let x = 0; x < CHUNKSIZE; x++) {
-            for (let y = 0; y < CHUNKSIZE; y++) {
+        for (let frameX = 0; frameX < CHUNKSIZE; frameX++) {
+            for (let frameY = 0; frameY < CHUNKSIZE; frameY++) {
+                let x = ~~(frameX / ELEMENTSIZE)
+                let y = ~~(frameY / ELEMENTSIZE)
                 let coord = elementCoordinate(x, y);
                 let el = this.elements[coord] || undefined;
                 let backgroundEL = this.backgroundElements[coord];
-                let dataIndex = coord * 4;
+                let dataIndex = elementCoordinate(frameX, frameY, CHUNKSIZE) * 4;
                 if (!el) {
                     for (let i = 0; i < 4; i++) {
                         this.frameBuffer.data[dataIndex + i] = backgroundEL?.col[i] || 255;
@@ -266,7 +264,7 @@ class Chunk {
                     let ab = (backgroundEL?.col[3] || 255) / 255;
                     let targetCell = true;
                     if (el instanceof Liquid) {
-                        targetCell = elementCoordinate(x, y - 1) > 0 ? (this.elements[elementCoordinate(x, y - 1)]) : chunks[`${this.x},${this.y - 1}`].elements[elementCoordinate(x, CHUNKSIZE - 1)];
+                        targetCell = elementCoordinate(x, y - 1) > 0 ? (this.elements[elementCoordinate(x, y - 1)]) : chunks[`${this.x},${this.y - 1}`].elements[elementCoordinate(x, REALCHUNKSIZE - 1)];
                     }
                     for (let i = 0; i < 3; i++) {
                         let ca = el?.col[i] - ((targetCell == undefined) ? 80 : 0);
@@ -285,13 +283,13 @@ class Chunk {
             }
         }
         if (PARTICLERENDER) {
-            let particlesInChunk = particles.filter(particle => detectCollision(particle.drawX, particle.drawY, 1, 1, this.x * CHUNKSIZE, this.y * CHUNKSIZE, CHUNKSIZE, CHUNKSIZE));
+            let particlesInChunk = particles.filter(particle => detectCollision(particle.drawX, particle.drawY, 1, 1, this.x * REALCHUNKSIZE, this.y * REALCHUNKSIZE, REALCHUNKSIZE, REALCHUNKSIZE));
 
             particlesInChunk.forEach(particle => {
-                let elementX = ((particle.drawX % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-                let elementY = ((particle.drawY % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+                let elementX = ((particle.drawX % REALCHUNKSIZE) + REALCHUNKSIZE) % REALCHUNKSIZE;
+                let elementY = ((particle.drawY % REALCHUNKSIZE) + REALCHUNKSIZE) % REALCHUNKSIZE;
                 let coord = elementCoordinate(elementX, elementY);
-                let dataIndex = coord * 4;
+                let dataIndex = elementCoordinate(elementX * ELEMENTSIZE, elementY * ELEMENTSIZE, CHUNKSIZE) * 4;
                 let aa = particle?.col[3] / 255;
                 let ab = (this.frameBuffer.data[dataIndex + 3] || 255) / 255;
                 for (let i = 0; i < 3; i++) {
@@ -352,8 +350,8 @@ class Particle {
             this.oldDrawX = this.drawX;
             this.oldDrawY = this.drawY;
 
-            let chunkX = ~~((this.drawX - (this.drawX < 0 ? -1 : 0)) / CHUNKSIZE) + (this.drawX < 0 ? -1 : 0);
-            let chunkY = ~~((this.drawY - (this.drawY < 0 ? -1 : 0)) / CHUNKSIZE) + (this.drawY < 0 ? -1 : 0);
+            let chunkX = ~~((this.drawX - (this.drawX < 0 ? -1 : 0)) / REALCHUNKSIZE) + (this.drawX < 0 ? -1 : 0);
+            let chunkY = ~~((this.drawY - (this.drawY < 0 ? -1 : 0)) / REALCHUNKSIZE) + (this.drawY < 0 ? -1 : 0);
 
             if (!chunks[`${chunkX},${chunkY}`]) { createNewChunk(chunkX, chunkY) }
             chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
@@ -448,14 +446,14 @@ class Particle {
         }
     }
     convertToElement() {
-        let chunkX = ~~((this.drawX - (this.drawX < 0 ? -1 : 0)) / CHUNKSIZE) + (this.drawX < 0 ? -1 : 0);
-        let chunkY = ~~((this.drawY - (this.drawY < 0 ? -1 : 0)) / CHUNKSIZE) + (this.drawY < 0 ? -1 : 0);
+        let chunkX = ~~((this.drawX - (this.drawX < 0 ? -1 : 0)) / REALCHUNKSIZE) + (this.drawX < 0 ? -1 : 0);
+        let chunkY = ~~((this.drawY - (this.drawY < 0 ? -1 : 0)) / REALCHUNKSIZE) + (this.drawY < 0 ? -1 : 0);
 
-        let elementX = ((this.drawX % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-        let elementY = ((this.drawY % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+        let elementX = ((this.drawX % REALCHUNKSIZE) + REALCHUNKSIZE) % REALCHUNKSIZE;
+        let elementY = ((this.drawY % REALCHUNKSIZE) + REALCHUNKSIZE) % REALCHUNKSIZE;
         let chunk = chunks[`${chunkX},${chunkY}`];
         if (!chunk) { createNewChunk(chunkX, chunkY) }
-        chunk.elements[elementCoordinate(elementX, elementY)] = new this.type(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col);
+        chunk.elements[elementCoordinate(elementX, elementY)] = new this.type(chunkX * REALCHUNKSIZE + elementX, chunkY * REALCHUNKSIZE + elementY, this.col);
         chunk.hasUpdatedSinceFrameBufferChange = true;
         chunk.shouldStepNextFrame = true;
 
@@ -472,17 +470,17 @@ class Element {
         this.velY = 1;
     }
     moveTo(x, y) {
-        let chunkX = ~~((this.x - (this.x < 0 ? -1 : 0)) / CHUNKSIZE) + (this.x < 0 ? -1 : 0);
-        let chunkY = ~~((this.y - (this.y < 0 ? -1 : 0)) / CHUNKSIZE) + (this.y < 0 ? -1 : 0);
+        let chunkX = ~~((this.x - (this.x < 0 ? -1 : 0)) / REALCHUNKSIZE) + (this.x < 0 ? -1 : 0);
+        let chunkY = ~~((this.y - (this.y < 0 ? -1 : 0)) / REALCHUNKSIZE) + (this.y < 0 ? -1 : 0);
 
-        let newChunkX = ~~((x - (x < 0 ? -1 : 0)) / CHUNKSIZE) + (x < 0 ? -1 : 0);
-        let newChunkY = ~~((y - (y < 0 ? -1 : 0)) / CHUNKSIZE) + (y < 0 ? -1 : 0);
+        let newChunkX = ~~((x - (x < 0 ? -1 : 0)) / REALCHUNKSIZE) + (x < 0 ? -1 : 0);
+        let newChunkY = ~~((y - (y < 0 ? -1 : 0)) / REALCHUNKSIZE) + (y < 0 ? -1 : 0);
 
-        let elementX = ((this.x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-        let elementY = ((this.y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+        let elementX = ((this.x % REALCHUNKSIZE) + REALCHUNKSIZE) % REALCHUNKSIZE;
+        let elementY = ((this.y % REALCHUNKSIZE) + REALCHUNKSIZE) % REALCHUNKSIZE;
 
-        let newElementX = ((x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-        let newElementY = ((y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+        let newElementX = ((x % REALCHUNKSIZE) + REALCHUNKSIZE) % REALCHUNKSIZE;
+        let newElementY = ((y % REALCHUNKSIZE) + REALCHUNKSIZE) % REALCHUNKSIZE;
 
         let elementOnNewPos = chunks[`${newChunkX},${newChunkY}`]?.elements[elementCoordinate(newElementX, newElementY)];
 
@@ -517,11 +515,11 @@ class Element {
 
     }
     convertToParticle(vel = { x: 0, y: 0 }) {
-        let chunkX = ~~((this.x - (this.x < 0 ? -1 : 0)) / CHUNKSIZE) + (this.x < 0 ? -1 : 0);
-        let chunkY = ~~((this.y - (this.y < 0 ? -1 : 0)) / CHUNKSIZE) + (this.y < 0 ? -1 : 0);
-        let elementX = ((this.x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-        let elementY = ((this.y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-        particles.push(new Particle(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col, vel, this.constructor))
+        let chunkX = ~~((this.x - (this.x < 0 ? -1 : 0)) / REALCHUNKSIZE) + (this.x < 0 ? -1 : 0);
+        let chunkY = ~~((this.y - (this.y < 0 ? -1 : 0)) / REALCHUNKSIZE) + (this.y < 0 ? -1 : 0);
+        let elementX = ((this.x % REALCHUNKSIZE) + REALCHUNKSIZE) % REALCHUNKSIZE;
+        let elementY = ((this.y % REALCHUNKSIZE) + REALCHUNKSIZE) % REALCHUNKSIZE;
+        particles.push(new Particle(chunkX * REALCHUNKSIZE + elementX, chunkY * REALCHUNKSIZE + elementY, this.col, vel, this.constructor))
         chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = undefined;
 
     }
@@ -532,10 +530,10 @@ class Element {
         this.setToFreeFalling(x - 1, y)
     }
     setToFreeFalling(x, y) {
-        let chunkX = ~~((x - (x < 0 ? -1 : 0)) / CHUNKSIZE) + (x < 0 ? -1 : 0);
-        let chunkY = ~~((y - (y < 0 ? -1 : 0)) / CHUNKSIZE) + (y < 0 ? -1 : 0);
-        let elementX = ((x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-        let elementY = ((y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+        let chunkX = ~~((x - (x < 0 ? -1 : 0)) / REALCHUNKSIZE) + (x < 0 ? -1 : 0);
+        let chunkY = ~~((y - (y < 0 ? -1 : 0)) / REALCHUNKSIZE) + (y < 0 ? -1 : 0);
+        let elementX = ((x % REALCHUNKSIZE) + REALCHUNKSIZE) % REALCHUNKSIZE;
+        let elementY = ((y % REALCHUNKSIZE) + REALCHUNKSIZE) % REALCHUNKSIZE;
         let chunk = chunks[`${chunkX},${chunkY}`];
         if (chunk) {
             let el = chunk.elements[elementCoordinate(elementX, elementY)];
@@ -744,15 +742,15 @@ class Camera {
     }
     updatePos() {
         this.x += (this.follow.x - this.x) * this.followFactor;
-        this.y += (this.follow.y - this.y) * this.followFactor
+        this.y += (this.follow.y - this.y) * this.followFactor;
     }
 }
 class Player {
     constructor() {
         this.x = 0;
         this.y = 20;
-        this.width = 10;
-        this.height = 20;
+        this.width = 5;
+        this.height = 10;
         this.vx = 0;
         this.vy = 0;
         this.grav = 9.82 / 130;
@@ -785,20 +783,21 @@ class Player {
 
         if (!this.onGround) { this.vy += this.grav; }
         if (this.jumping) { this.animateJump(); }
-        this.x += this.vx * deltaTime;
-        this.y += this.vy * deltaTime;
+        this.x += this.vx * deltaTime * ELEMENTSIZE;
+        this.y += this.vy * deltaTime * ELEMENTSIZE;
         this.checkCollision();
         this.camera.updatePos();
     };
     checkCollision() {
-        let xValue = ~~(this.x + canvas.width / 2 - this.width / 2);
-        let yValue = ~~(this.y + canvas.height / 2 - this.height / 2);
+        let xValue = ~~((this.x + canvas.width / 2 - this.width / 2) / ELEMENTSIZE);
+        let yValue = ~~((this.y + canvas.height / 2 - this.height / 2) / ELEMENTSIZE);
+
         for (let i = 0; i < this.height * this.sideColFactor; i++) {
             let x = xValue;
             let y = yValue + i;
             let el = getElementAtCell(x, y);
             if (el && !(el instanceof Liquid)) {
-                this.x -= this.vx - 0.1;
+                this.x -= this.vx - 0.1 * ELEMENTSIZE;
                 this.vx = 0;
             };
         };
@@ -807,7 +806,7 @@ class Player {
             let y = yValue;
             let el = getElementAtCell(x, y);
             if (el && !(el instanceof Liquid)) {
-                this.y -= this.vy - 0.01;
+                this.y -= this.vy - 0.01 * ELEMENTSIZE;
                 this.vy = -this.vy * this.roofPowerBack;
             } else if (el instanceof Liquid) {
                 this.vy *= this.waterLoss;
@@ -818,7 +817,7 @@ class Player {
             let y = yValue + i;
             let el = getElementAtCell(x, y);
             if (el && !(el instanceof Liquid)) {
-                this.x -= this.vx + 0.01;
+                this.x -= this.vx + 0.01 * ELEMENTSIZE;
                 this.vx = 0;
             };
         };
@@ -827,7 +826,7 @@ class Player {
             let y = yValue + this.height - 1;
             let el = getElementAtCell(x, y);
             if (el && !(el instanceof Liquid)) {
-                this.y -= this.vy + 0.1;
+                this.y -= this.vy + 0.1 * ELEMENTSIZE;
                 this.vy = 0;
             } else if (el instanceof Liquid) {
                 this.vy *= this.waterLoss;
@@ -841,20 +840,20 @@ class Player {
 
     }
     draw() {
-        renderC.fillRect((canvas.width / 2 - this.width / 2 + (this.x - this.camera.x)) * scale, (canvas.height / 2 - this.height / 2 + (this.y - this.camera.y)) * scale, this.width * scale, this.height * scale)
+        renderC.fillRect((canvas.width / 2 - this.width / 2 + (this.x - this.camera.x)) * scale, (canvas.height / 2 - this.height / 2 + (this.y - this.camera.y)) * scale, this.width * scale * ELEMENTSIZE, this.height * scale * ELEMENTSIZE)
     }
 }
 
-function elementCoordinate(x, y) {
-    return y * CHUNKSIZE + x;
+function elementCoordinate(x, y, chunksize = REALCHUNKSIZE) {
+    return y * chunksize + x;
 }
 
 function getElementAtCell(x, y) {
-    let chunkX = ~~((x - (x < 0 ? -1 : 0)) / CHUNKSIZE) + (x < 0 ? -1 : 0);
-    let chunkY = ~~((y - (y < 0 ? -1 : 0)) / CHUNKSIZE) + (y < 0 ? -1 : 0);
+    let chunkX = ~~((x - (x < 0 ? -1 : 0)) / REALCHUNKSIZE) + (x < 0 ? -1 : 0);
+    let chunkY = ~~((y - (y < 0 ? -1 : 0)) / REALCHUNKSIZE) + (y < 0 ? -1 : 0);
 
-    let elementX = ((x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-    let elementY = ((y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+    let elementX = ((x % REALCHUNKSIZE) + REALCHUNKSIZE) % REALCHUNKSIZE;
+    let elementY = ((y % REALCHUNKSIZE) + REALCHUNKSIZE) % REALCHUNKSIZE;
 
     let elementCoordinateValue = elementCoordinate(elementX, elementY);
 
