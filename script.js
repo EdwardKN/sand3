@@ -1,6 +1,6 @@
-const CHUNKSIZE = 32;
+const ELEMENTSIZE = 4;
+const CHUNKSIZE = 64;
 const TEXTURESIZE = 128;
-const ELEMENTSIZE = 4; // gör inget i nuläget. har planer
 
 const REALCHUNKSIZE = CHUNKSIZE / ELEMENTSIZE;
 
@@ -8,7 +8,7 @@ const SIMULATIONSTEPSPERFRAME = 1;
 
 const TRANS = true;
 
-const PARTICLERENDER = true;
+const PARTICLERENDER = false;
 
 const FPSTOHOLD = 55;
 
@@ -103,8 +103,8 @@ function updateCursor() {
         //mouse.down = false;
         let area = Math.pow(MOUSESIZE, 2);
         for (let i = 0; i < area; i++) {
-            let x = ~~((mouse.x + ~~(i / MOUSESIZE) - ~~(MOUSESIZE / 2 - player.camera.x))) / ELEMENTSIZE;
-            let y = ~~((mouse.y + i % MOUSESIZE - ~~(MOUSESIZE / 2 - player.camera.y))) / ELEMENTSIZE
+            let x = ~~(((mouse.x + ~~(i / MOUSESIZE) - ~~(MOUSESIZE / 2 - player.camera.x))) / ELEMENTSIZE);
+            let y = ~~(((mouse.y + i % MOUSESIZE - ~~(MOUSESIZE / 2 - player.camera.y))) / ELEMENTSIZE)
 
             let chunkX = ~~((x - (x < 0 ? -1 : 0)) / REALCHUNKSIZE) + (x < 0 ? -1 : 0);
             let chunkY = ~~((y - (y < 0 ? -1 : 0)) / REALCHUNKSIZE) + (y < 0 ? -1 : 0);
@@ -188,13 +188,13 @@ function createNewChunk(x, y) {
 }
 
 function updateParticles() {
-    let filteredParticles = particles.filter(particle => detectCollision(particle.drawX, particle.drawY, 1, 1, ~~(player.camera.x), ~~(player.camera.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE));
+    let filteredParticles = particles.filter(particle => detectCollision(particle.drawX * ELEMENTSIZE, particle.drawY * ELEMENTSIZE, ELEMENTSIZE, ELEMENTSIZE, ~~(player.camera.x), ~~(player.camera.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE));
 
     particlesOnScreen = filteredParticles.length
 
     filteredParticles.forEach(e => e.updatePos());
 
-    let otherParticles = particles.filter(particle => !detectCollision(particle.drawX, particle.drawY, 1, 1, ~~(player.camera.x), ~~(player.camera.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE));
+    let otherParticles = particles.filter(particle => !detectCollision(particle.drawX * ELEMENTSIZE, particle.drawY * ELEMENTSIZE, ELEMENTSIZE, ELEMENTSIZE, ~~(player.camera.x), ~~(player.camera.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE));
 
     otherParticles.forEach(particle => particle.convertToElement());
 }
@@ -249,16 +249,23 @@ class Chunk {
         this.hasUpdatedSinceFrameBufferChange = false;
         for (let frameX = 0; frameX < CHUNKSIZE; frameX++) {
             for (let frameY = 0; frameY < CHUNKSIZE; frameY++) {
-                let x = ~~(frameX / ELEMENTSIZE)
-                let y = ~~(frameY / ELEMENTSIZE)
+                let x = ~~(frameX / ELEMENTSIZE);
+                let y = ~~(frameY / ELEMENTSIZE);
                 let coord = elementCoordinate(x, y);
                 let el = this.elements[coord] || undefined;
                 let backgroundEL = this.backgroundElements[coord];
                 let dataIndex = elementCoordinate(frameX, frameY, CHUNKSIZE) * 4;
                 if (!el) {
-                    for (let i = 0; i < 4; i++) {
-                        this.frameBuffer.data[dataIndex + i] = backgroundEL?.col[i] || 255;
+                    let texData = getWholeImageDataFromSpriteSheet(images.textures.stoneElement, frameX % ELEMENTSIZE, frameY % ELEMENTSIZE);
+                    let aa = 0.5;
+                    let ab = 1;
+                    for (let i = 0; i < 3; i++) {
+                        let ca = images.imageData.data[texData + i];
+                        let cb = backgroundEL?.col[i] || 255;
+                        let a0 = aa + ab * (1 - aa);
+                        this.frameBuffer.data[dataIndex + i] = (ca * aa + cb * ab * (1 - aa)) / a0;
                     }
+                    this.frameBuffer.data[dataIndex + 3] = 255;
                 } else if (TRANS) {
                     let aa = el?.col[3] / 255;
                     let ab = (backgroundEL?.col[3] || 255) / 255;
@@ -283,22 +290,28 @@ class Chunk {
             }
         }
         if (PARTICLERENDER) {
-            let particlesInChunk = particles.filter(particle => detectCollision(particle.drawX, particle.drawY, 1, 1, this.x * REALCHUNKSIZE, this.y * REALCHUNKSIZE, REALCHUNKSIZE, REALCHUNKSIZE));
+            let particlesInChunk = particles.filter(particle => detectCollision(particle.drawX * ELEMENTSIZE, particle.drawY * ELEMENTSIZE, ELEMENTSIZE, ELEMENTSIZE, this.x * CHUNKSIZE, this.y * CHUNKSIZE, REALCHUNKSIZE, REALCHUNKSIZE));
 
             particlesInChunk.forEach(particle => {
                 let elementX = ((particle.drawX % REALCHUNKSIZE) + REALCHUNKSIZE) % REALCHUNKSIZE;
                 let elementY = ((particle.drawY % REALCHUNKSIZE) + REALCHUNKSIZE) % REALCHUNKSIZE;
-                let coord = elementCoordinate(elementX, elementY);
-                let dataIndex = elementCoordinate(elementX * ELEMENTSIZE, elementY * ELEMENTSIZE, CHUNKSIZE) * 4;
+                let coord = elementCoordinate((elementX * ELEMENTSIZE), (elementY * ELEMENTSIZE), CHUNKSIZE)
+                let dataIndex = coord * 4;
                 let aa = particle?.col[3] / 255;
                 let ab = (this.frameBuffer.data[dataIndex + 3] || 255) / 255;
-                for (let i = 0; i < 3; i++) {
-                    let ca = particle?.col[i];
-                    let cb = this.frameBuffer.data[dataIndex + i] || 255;
-                    let a0 = aa + ab * (1 - aa);
+                for (let x = 0; x < ELEMENTSIZE; x++) {
+                    for (let y = 0; y < ELEMENTSIZE; y++) {
+                        for (let i = 0; i < 3; i++) {
+                            let ca = particle?.col[i];
+                            let cb = this.frameBuffer.data[dataIndex + i] || 255;
+                            let a0 = aa + ab * (1 - aa);
+                            let colVal = (ca * aa + cb * ab * (1 - aa)) / a0;
 
-                    this.frameBuffer.data[dataIndex + i] = (ca * aa + cb * ab * (1 - aa)) / a0;
+                            this.frameBuffer.data[dataIndex + i] = colVal;
+                        }
+                    }
                 }
+
                 this.frameBuffer.data[dataIndex + 3] = 255;
             })
         }
@@ -466,6 +479,9 @@ class Element {
         this.x = x;
         this.y = y;
         this.col = col;
+
+        this.tex = images.textures.stoneElement;
+
 
         this.velY = 1;
     }
@@ -714,14 +730,17 @@ class Liquid extends Element {
         }
         if (maxLeft !== 0 || maxRight !== 0) {
             if (maxLeft > maxRight) {
-                if (maxLeft > this.dispersionRate / 2 && detectCollision(this.x, this.y, 1, 1, ~~(player.camera.x), ~~(player.camera.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
+                if (maxLeft > this.dispersionRate / 2 && detectCollision(this.x, this.y, ELEMENTSIZE, ELEMENTSIZE, ~~(player.camera.x) / ELEMENTSIZE, ~~(player.camera.y) / ELEMENTSIZE, STANDARDX * RENDERSCALE / ELEMENTSIZE, STANDARDY * RENDERSCALE / ELEMENTSIZE)) {
                     this.convertToParticle({ x: -randomFloatFromRange(0.5, 1), y: randomFloatFromRange(-0.5, -0.2) })
+                    //this.moveTo(this.x - maxLeft, this.y)
+
                 } else {
                     this.moveTo(this.x - maxLeft, this.y)
                 }
             } else if (maxRight > maxLeft) {
-                if (maxRight > this.dispersionRate / 2 && detectCollision(this.x, this.y, 1, 1, ~~(player.camera.x), ~~(player.camera.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
+                if (maxRight > this.dispersionRate / 2 && detectCollision(this.x, this.y, ELEMENTSIZE, ELEMENTSIZE, ~~(player.camera.x) / ELEMENTSIZE, ~~(player.camera.y) / ELEMENTSIZE, STANDARDX * RENDERSCALE / ELEMENTSIZE, STANDARDY * RENDERSCALE / ELEMENTSIZE)) {
                     this.convertToParticle({ x: randomFloatFromRange(0.5, 1), y: randomFloatFromRange(-0.5, -0.2) })
+                    //this.moveTo(this.x + maxRight, this.y)
 
                 } else {
                     this.moveTo(this.x + maxRight, this.y)
@@ -749,8 +768,8 @@ class Player {
     constructor() {
         this.x = 0;
         this.y = 20;
-        this.width = 5;
-        this.height = 10;
+        this.width = 4;
+        this.height = 8;
         this.vx = 0;
         this.vy = 0;
         this.grav = 9.82 / 130;

@@ -1,9 +1,34 @@
 {
   "frames": [
     {
-      "filename": "textures/stone.png",
+      "filename": "textures/stoneElement.png",
       "frame": {
         "x": 1,
+        "y": 1,
+        "w": 8,
+        "h": 8
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 8,
+        "h": 8
+      },
+      "sourceSize": {
+        "w": 8,
+        "h": 8
+      },
+      "pivot": {
+        "x": 0.5,
+        "y": 0.5
+      }
+    },
+    {
+      "filename": "textures/stone.png",
+      "frame": {
+        "x": 11,
         "y": 1,
         "w": 128,
         "h": 128
@@ -28,7 +53,7 @@
     {
       "filename": "textures/stone2.png",
       "frame": {
-        "x": 131,
+        "x": 141,
         "y": 1,
         "w": 128,
         "h": 128
@@ -57,7 +82,7 @@
     "image": "texture.png",
     "format": "RGBA8888",
     "size": {
-      "w": 260,
+      "w": 270,
       "h": 130
     },
     "scale": 1
