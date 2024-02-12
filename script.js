@@ -113,15 +113,11 @@ function updateCursor() {
             if (chunks[`${chunkX},${chunkY}`]) {
                 if (!chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)]) {
                     if (tool == 1) {
-                        let offset = randomIntFromRange(0, 30) - 15
-                        chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new Liquid(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, [102 + offset, 171 + offset, 230 + offset / 2, 150]);
+                        chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new Water(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY);
                     } else if (tool == 2) {
-                        let offset = randomIntFromRange(0, 20) - 10
-                        chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new MovableSolid(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, [195 + offset, 195 + offset, 145 + offset, 255]);
+                        chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new Sand(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY);
                     } else if (tool == 4) {
-                        let offset = randomIntFromRange(0, 30) - 15
-                        mouse.down = false;
-                        particles.push(new Particle(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, [102 + offset, 171 + offset, 230 + offset / 2, 100], { x: randomFloatFromRange(-2, 2), y: randomFloatFromRange(-2, -1) }))
+                        chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new Steam(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY);
                     }
 
                     chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
@@ -322,7 +318,7 @@ class Particle {
     constructor(x, y, col, startVel = {
         x: 0,
         y: 0
-    }, type = Liquid) {
+    }, grav = 0.1, type = Liquid) {
         this.x = x;
         this.y = y;
         this.drawX = x;
@@ -333,7 +329,7 @@ class Particle {
 
         this.col = col;
 
-        this.gravity = 0.1;
+        this.gravity = grav;
 
         this.vel = startVel;
 
@@ -516,12 +512,12 @@ class Element {
         chunks[`${chunkX},${chunkY - 1}`].shouldStepNextFrame = true;
 
     }
-    convertToParticle(vel = { x: 0, y: 0 }) {
+    convertToParticle(vel = { x: 0, y: 0 }, grav = 0.1) {
         let chunkX = ~~((this.x - (this.x < 0 ? -1 : 0)) / CHUNKSIZE) + (this.x < 0 ? -1 : 0);
         let chunkY = ~~((this.y - (this.y < 0 ? -1 : 0)) / CHUNKSIZE) + (this.y < 0 ? -1 : 0);
         let elementX = ((this.x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
         let elementY = ((this.y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-        particles.push(new Particle(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col, vel, this.constructor))
+        particles.push(new Particle(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col, vel, grav, this.constructor))
         chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = undefined;
 
     }
@@ -558,17 +554,14 @@ class Solid extends Element {
 
 class MovableSolid extends Solid {
     constructor(x, y, col) {
-        super(x, y, col)
+        super(x, y, col);
         this.velX = 0;
-        this.outFlow = 0.3;
-        this.outFlowFriction = 0.8;
         this.isFreeFalling = false;
         this.newFreeFalling = false;
         this.lastPos = {
             x: x,
             y: y
         };
-        this.inertialResistance = 0.01;
     }
     step() {
         this.isFreeFalling = this.newFreeFalling;
@@ -660,11 +653,11 @@ class MovableSolid extends Solid {
 }
 class Liquid extends Element {
     constructor(x, y, col) {
-        super(x, y, col)
-        this.dispersionRate = 4;
+        super(x, y, col);
+        this.flowDir = 1;
     }
     step() {
-        let targetCell = getElementAtCell(this.x, this.y + 1);
+        let targetCell = getElementAtCell(this.x, this.y + 1 * this.flowDir);
         if (targetCell == undefined) {
             this.lookVertically();
         } else {
@@ -675,7 +668,7 @@ class Liquid extends Element {
     lookVertically() {
         let maxDir = 0;
         for (let i = 1; i < ~~this.velY + 1; i++) {
-            let targetCell = getElementAtCell(this.x, this.y + i);
+            let targetCell = getElementAtCell(this.x, this.y + i * this.flowDir);
             if (targetCell == undefined) {
                 maxDir = i
             } else {
@@ -684,7 +677,7 @@ class Liquid extends Element {
         }
         if (maxDir !== 0) {
             this.velY += 0.1;
-            this.moveTo(this.x, this.y + maxDir)
+            this.moveTo(this.x, this.y + maxDir * this.flowDir)
         }
     }
     lookHorizontally() {
@@ -717,13 +710,13 @@ class Liquid extends Element {
         if (maxLeft !== 0 || maxRight !== 0) {
             if (maxLeft > maxRight) {
                 if (maxLeft > this.dispersionRate / 2 && detectCollision(this.x, this.y, 1, 1, ~~(player.camera.x), ~~(player.camera.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
-                    this.convertToParticle({ x: -randomFloatFromRange(0.5, 1), y: randomFloatFromRange(-0.5, -0.2) })
+                    this.convertToParticle({ x: -randomFloatFromRange(0.5, 1), y: randomFloatFromRange(-0.5, -0.2) }, 0.1 * this.flowDir)
                 } else {
                     this.moveTo(this.x - maxLeft, this.y)
                 }
             } else if (maxRight > maxLeft) {
                 if (maxRight > this.dispersionRate / 2 && detectCollision(this.x, this.y, 1, 1, ~~(player.camera.x), ~~(player.camera.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
-                    this.convertToParticle({ x: randomFloatFromRange(0.5, 1), y: randomFloatFromRange(-0.5, -0.2) })
+                    this.convertToParticle({ x: randomFloatFromRange(0.5, 1), y: randomFloatFromRange(-0.5, -0.2) }, 0.1 * this.flowDir)
 
                 } else {
                     this.moveTo(this.x + maxRight, this.y)
@@ -732,6 +725,13 @@ class Liquid extends Element {
                 this.moveTo(this.x + maxRight * (~~(Math.random() * 2) || -1), this.y)
             }
         }
+    }
+}
+
+class Gas extends Liquid {
+    constructor(x, y, col) {
+        super(x, y, col);
+        this.flowDir = -1;
     }
 }
 
@@ -765,8 +765,9 @@ class Player {
         this.downAcc = 0.05;
 
         this.jumpPower = 2;
-        this.roofPowerBack = 0.3;
+        this.roofPowerBack = 0.6;
         this.onGround = false;
+        this.hasRoof = false;
     }
     update() {
         if (pressedKeys['KeyA']) {
@@ -775,20 +776,20 @@ class Player {
         if (pressedKeys['KeyD']) {
             this.vx += this.sideAcc;
         }
-        if (pressedKeys['KeyW'] && this.onGround) {
+        if (pressedKeys['KeyW'] && this.onGround && !this.hasRoof) {
             this.vy = -this.jumpPower;
         }
-        if (pressedKeys['KeyS']) {
+        if (pressedKeys['KeyS'] && !this.onGround) {
             this.vy += this.downAcc;
         }
         this.vx *= this.sideSpeedLoss;
 
         if (!this.onGround) { this.vy += this.grav; }
-        if (this.jumping) { this.animateJump(); }
         this.x += this.vx * deltaTime;
         this.y += this.vy * deltaTime;
-        this.checkCollision();
         this.camera.updatePos();
+        this.checkCollision();
+
     };
     checkCollision() {
         let xValue = ~~(this.x + canvas.width / 2 - this.width / 2);
@@ -798,7 +799,7 @@ class Player {
             let y = yValue + i;
             let el = getElementAtCell(x, y);
             if (el && !(el instanceof Liquid)) {
-                this.x -= this.vx - 0.1;
+                this.x -= this.vx - 0.01;
                 this.vx = 0;
             };
         };
@@ -807,9 +808,9 @@ class Player {
             let y = yValue;
             let el = getElementAtCell(x, y);
             if (el && !(el instanceof Liquid)) {
-                this.y -= this.vy - 0.01;
+                this.y -= this.vy - 0.1;
                 this.vy = -this.vy * this.roofPowerBack;
-            } else if (el instanceof Liquid) {
+            } else if (el instanceof Liquid && !(el instanceof Gas)) {
                 this.vy *= this.waterLoss;
             };
         };
@@ -829,14 +830,19 @@ class Player {
             if (el && !(el instanceof Liquid)) {
                 this.y -= this.vy + 0.1;
                 this.vy = 0;
-            } else if (el instanceof Liquid) {
+            } else if (el instanceof Liquid && !(el instanceof Gas)) {
                 this.vy *= this.waterLoss;
             };
         };
-        if (getElementAtCell(~~(xValue), ~~(yValue + this.height)) || getElementAtCell(~~(xValue + this.width - 1), ~~(yValue + this.height))) {
+        if (getElementAtCell(~~(xValue), ~~(yValue + this.height)) !== undefined && !(getElementAtCell(~~(xValue), ~~(yValue + this.height)) instanceof Gas) || getElementAtCell(~~(xValue + this.width - 1), ~~(yValue + this.height)) !== undefined && !(getElementAtCell(~~(xValue + this.width - 1), ~~(yValue + this.height)) instanceof Gas)) {
             this.onGround = true;
         } else {
             this.onGround = false;
+        }
+        if (getElementAtCell(~~(xValue), ~~(yValue)) !== undefined && !(getElementAtCell(~~(xValue), ~~(yValue)) instanceof Gas) || getElementAtCell(~~(xValue + this.width - 1), ~~(yValue)) !== undefined && !(getElementAtCell(~~(xValue + this.width - 1), ~~(yValue)) instanceof Gas)) {
+            this.hasRoof = true;
+        } else {
+            this.hasRoof = false;
         }
 
     }
