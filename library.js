@@ -1007,3 +1007,5 @@ function rgb(r, g, b) {
 function fixAngle(angle) {
     return (angle > Math.PI * 2 ? angle - Math.PI * 2 : (angle < 0 ? angle + Math.PI * 2 : angle))
 }
+
+const K = 272.15;

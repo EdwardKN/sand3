@@ -14,7 +14,7 @@ var chunks = {};
 var particles = [];
 var player;
 
-const MOUSESIZE = 10;
+const MOUSESIZE = 1;
 
 var chunkAmount = 0;
 
@@ -25,6 +25,7 @@ var maxSimulatedAtTime = MAXMAXSIMULATEDATTIME;
 var particlesOnScreen = 0;
 
 var tool = 1;
+
 
 async function init() {
     await loadData();
@@ -126,6 +127,9 @@ function updateCursor() {
                     chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = undefined;
 
                     chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
+                } else if (tool == 5) {
+                    mouse.down = false;
+                    chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)].transformInto(Water);
                 }
             }
         }
@@ -310,6 +314,7 @@ class Chunk {
         for (let i = 0; i < filteredElements.length; i++) {
             let element = filteredElements[i];
             element.step();
+            element.conductHeatNearby();
         }
     }
 }
@@ -318,7 +323,7 @@ class Particle {
     constructor(x, y, col, startVel = {
         x: 0,
         y: 0
-    }, grav = 0.1, type = Liquid) {
+    }, grav = 0.1, type = Liquid, temp = 25) {
         this.x = x;
         this.y = y;
         this.drawX = x;
@@ -334,6 +339,8 @@ class Particle {
         this.vel = startVel;
 
         this.type = type;
+
+        this.temp = temp;
     }
     updatePos() {
         this.vel.y += this.gravity;
@@ -452,6 +459,8 @@ class Particle {
         let chunk = chunks[`${chunkX},${chunkY}`];
         if (!chunk) { createNewChunk(chunkX, chunkY) }
         chunk.elements[elementCoordinate(elementX, elementY)] = new this.type(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col);
+        chunk.elements[elementCoordinate(elementX, elementY)].temp = this.temp;
+
         chunk.hasUpdatedSinceFrameBufferChange = true;
         chunk.shouldStepNextFrame = true;
 
@@ -466,6 +475,12 @@ class Element {
         this.col = col;
 
         this.velY = 1;
+
+        this.temp = K + 25;
+        this.heatCapacity = 1;
+        this.thermalConductivity = 1;
+
+        this.hasChangedTempRecently = true;
     }
     moveTo(x, y) {
         let chunkX = ~~((this.x - (this.x < 0 ? -1 : 0)) / CHUNKSIZE) + (this.x < 0 ? -1 : 0);
@@ -517,7 +532,7 @@ class Element {
         let chunkY = ~~((this.y - (this.y < 0 ? -1 : 0)) / CHUNKSIZE) + (this.y < 0 ? -1 : 0);
         let elementX = ((this.x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
         let elementY = ((this.y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-        particles.push(new Particle(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col, vel, grav, this.constructor))
+        particles.push(new Particle(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col, vel, grav, this.constructor, this.temp))
         chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = undefined;
 
     }
@@ -542,6 +557,70 @@ class Element {
             }
         }
     }
+    conductHeatNearby() {
+        this.conductHeat(this.x, this.y - 1);
+        this.conductHeat(this.x, this.y + 1);
+        this.conductHeat(this.x + 1, this.y);
+        this.conductHeat(this.x - 1, this.y);
+    }
+    conductHeat(x, y) {
+        let chunkX = ~~((x - (x < 0 ? -1 : 0)) / CHUNKSIZE) + (x < 0 ? -1 : 0);
+        let chunkY = ~~((y - (y < 0 ? -1 : 0)) / CHUNKSIZE) + (y < 0 ? -1 : 0);
+        let elementX = ((x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+        let elementY = ((y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+        let chunk = chunks[`${chunkX},${chunkY}`];
+        if (chunk) {
+            let el = chunk.elements[elementCoordinate(elementX, elementY)];
+            if (el) {
+                let thermalConductivity = Math.min(this.thermalConductivity, el.thermalConductivity) / 1000; // J / Ks
+
+                let deltaTemp = this.temp - el.temp;
+
+                this.temp += (thermalConductivity * deltaTemp) / (1 * this.heatCapacity);
+                el.temp -= (thermalConductivity * deltaTemp) / (1 * el.heatCapacity);
+
+                if (Math.abs((thermalConductivity * deltaTemp) / (1 * this.heatCapacity)) > 0.01) {
+                    this.hasChangedTempRecently = true;
+                    el.hasChangedTempRecently = true;
+
+
+                }
+            }
+        }
+    }
+    checkStateChange() {
+        if (this instanceof Gas) {
+            if (this.temp < this.condensePoint) {
+
+            }
+        } else if (this instanceof Liquid) {
+            if (this.temp < this.freezePoint) {
+
+            } else if (this.temp > this.boilPoint) {
+
+            }
+        } else if (this instanceof Solid) {
+            if (this.temp > this.meltPoint) {
+
+            }
+        }
+    }
+    transformInto(type) {
+        let chunkX = ~~((this.x - (this.x < 0 ? -1 : 0)) / CHUNKSIZE) + (this.x < 0 ? -1 : 0);
+        let chunkY = ~~((this.y - (this.y < 0 ? -1 : 0)) / CHUNKSIZE) + (this.y < 0 ? -1 : 0);
+
+        let elementX = ((this.x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+        let elementY = ((this.y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+
+
+        let chunk = chunks[`${chunkX},${chunkY}`];
+        chunk.elements[elementCoordinate(elementX, elementY)] = new type(elementX, elementY);
+        chunk.elements[elementCoordinate(elementX, elementY)].temp = this.temp;
+
+        chunk.hasUpdatedSinceFrameBufferChange = true;
+    }
+
+
 }
 
 class Background extends Element {
