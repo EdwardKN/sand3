@@ -26,3 +26,11 @@ class Steam extends Gas {
         this.dispersionRate = 4;
     }
 }
+class Ice extends Solid {
+    constructor(x, y) {
+        let offset = randomIntFromRange(0, 30) - 15;
+        let col = [200 + offset, 200 + offset, 220 + offset / 2, 150];
+        super(x, y, col);
+        this.dispersionRate = 4;
+    }
+}

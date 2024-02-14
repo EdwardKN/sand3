@@ -655,10 +655,11 @@ class Liquid extends Element {
     constructor(x, y, col) {
         super(x, y, col);
         this.flowDir = 1;
+        this.flowThrough = Gas;
     }
     step() {
         let targetCell = getElementAtCell(this.x, this.y + 1 * this.flowDir);
-        if (targetCell == undefined) {
+        if (targetCell == undefined || (targetCell instanceof this.flowThrough && !(targetCell instanceof this.constructor))) {
             this.lookVertically();
         } else {
             this.velY = 1;
@@ -669,7 +670,7 @@ class Liquid extends Element {
         let maxDir = 0;
         for (let i = 1; i < ~~this.velY + 1; i++) {
             let targetCell = getElementAtCell(this.x, this.y + i * this.flowDir);
-            if (targetCell == undefined) {
+            if (targetCell == undefined || targetCell instanceof this.flowThrough && !(targetCell instanceof this.constructor)) {
                 maxDir = i
             } else {
                 i = Infinity;
@@ -690,14 +691,14 @@ class Liquid extends Element {
             let targetCell1 = getElementAtCell(this.x + i, this.y);
             let targetCell2 = getElementAtCell(this.x - i, this.y);
             if (!rightMaxed) {
-                if (targetCell1 == undefined) {
+                if (targetCell1 == undefined || targetCell1 instanceof this.flowThrough && !(targetCell1 instanceof this.constructor)) {
                     maxRight = i
                 } else {
                     rightMaxed = true;
                 }
             }
             if (!leftMaxed) {
-                if (targetCell2 == undefined && !leftMaxed) {
+                if ((targetCell2 == undefined || targetCell2 instanceof this.flowThrough && !(targetCell2 instanceof this.constructor)) && !leftMaxed) {
                     maxLeft = i
                 } else {
                     leftMaxed = true;
@@ -732,6 +733,7 @@ class Gas extends Liquid {
     constructor(x, y, col) {
         super(x, y, col);
         this.flowDir = -1;
+        this.flowThrough = Liquid;
     }
 }
 
