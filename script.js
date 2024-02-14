@@ -128,8 +128,12 @@ function updateCursor() {
 
                     chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
                 } else if (tool == 5) {
-                    mouse.down = false;
-                    //chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)].transformInto(Water);
+                    let el = chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)];
+                    el.temp += 20;
+                    el.hasChangedTempRecently = true;
+                    el.checkStateChange();
+                    chunks[`${chunkX},${chunkY}`].shouldStepNextFrame = true;
+                    chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
                 }
             }
         }
@@ -307,14 +311,15 @@ class Chunk {
         this.hasStepped = true;
         this.hasUpdatedSinceFrameBufferChange = true;
         let filteredElements = shuffle(this.elements.filter(e => (e instanceof MovableSolid || e instanceof Liquid)));
+        this.elements.filter(e => (e?.hasChangedTempRecently)).forEach(element => {
+            element.conductHeatNearby();
+        });
 
         for (let i = 0; i < filteredElements.length; i++) {
             let element = filteredElements[i];
             element.step();
         }
-        this.elements.filter(e => (e?.hasChangedTempRecently)).forEach(element => {
-            element.conductHeatNearby();
-        });
+
     }
 }
 
@@ -591,7 +596,7 @@ class Element {
                     el.checkStateChange();
                 }
             } else {
-                let thermalConductivity = Math.min(this.thermalConductivity, 0.0212) / 10;
+                let thermalConductivity = Math.min(this.thermalConductivity, 0.0212) / 100;
 
                 let deltaTemp = this.temp - 25;
 
@@ -623,7 +628,7 @@ class Element {
         }
     }
     transformInto(type) {
-        let chunkX = ~~((this.x - (this.x < 0 ? -1 : 0)) / CHUNKSIZE) + (this.x < 0 ? -1 : 0);
+        let chunkX = ~~((this.x - (this.x < 0 ? -1 : 0)) / CHUNKSIZE) + (this.x < 0 ? -1 : 0); 2
         let chunkY = ~~((this.y - (this.y < 0 ? -1 : 0)) / CHUNKSIZE) + (this.y < 0 ? -1 : 0);
 
         let elementX = ((this.x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
@@ -635,6 +640,8 @@ class Element {
         chunk.elements[elementCoordinate(elementX, elementY)].temp = this.temp;
 
         chunk.hasUpdatedSinceFrameBufferChange = true;
+        chunk.shouldStepNextFrame = true;
+
     }
 
 
@@ -752,12 +759,13 @@ class Liquid extends Element {
         super(x, y, col);
         this.flowDir = 1;
         this.flowThrough = Gas;
+        this.flowChance = 1;
     }
     step() {
         let targetCell = getElementAtCell(this.x, this.y + 1 * this.flowDir);
         if (targetCell == undefined || (targetCell instanceof this.flowThrough && !(targetCell instanceof this.constructor))) {
             this.lookVertically();
-        } else {
+        } else if (true || Math.random() < this.flowChance) {
             this.velY = 1;
             this.lookHorizontally();
         }

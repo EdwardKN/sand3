@@ -8,6 +8,9 @@ class Sand extends MovableSolid {
         this.inertialResistance = 0.01;
         this.heatCapacity = 0.835;
         this.thermalConductivity = 0.27;
+
+        this.meltPoint = K + 1200;
+        this.meltElement = Lava;
     }
 }
 
@@ -70,6 +73,38 @@ class Stone extends Solid {
         this.thermalConductivity = 1.19;
 
         this.meltPoint = K + 1200;
-        this.meltElement = Sand;
+        this.meltElement = Basalt;
+    }
+}
+
+
+class Lava extends Liquid {
+    constructor(x, y) {
+        let offset = randomIntFromRange(0, 30) - 15;
+        let col = [240 + offset, 165 + offset, 0, 255];
+        super(x, y, col);
+        this.dispersionRate = 2;
+        this.heatCapacity = 0.880;
+        this.thermalConductivity = 0.54;
+
+        this.flowChance = 0.05;
+        this.freezePoint = K + 1200;
+        this.freezeElement = Basalt;
+
+        this.boilPoint = Infinity;
+    }
+}
+class Basalt extends MovableSolid {
+    constructor(x, y) {
+        let offset = randomIntFromRange(0, 30) - 15;
+        let col = [30 + offset, 30 + offset, 30 + offset, 255];
+        super(x, y, col);
+        this.heatCapacity = 2.05;
+        this.thermalConductivity = 0.5551;
+        this.outFlow = 0;
+        this.inertialResistance = 0.9;
+
+        this.meltPoint = K + 1200;
+        this.meltElement = Lava;
     }
 }
