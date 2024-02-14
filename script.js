@@ -14,7 +14,7 @@ var chunks = {};
 var particles = [];
 var player;
 
-const MOUSESIZE = 1;
+const MOUSESIZE = 10;
 
 var chunkAmount = 0;
 
@@ -129,7 +129,7 @@ function updateCursor() {
                     chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
                 } else if (tool == 5) {
                     mouse.down = false;
-                    chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)].transformInto(Water);
+                    //chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)].transformInto(Water);
                 }
             }
         }
@@ -176,10 +176,7 @@ function createNewChunk(x, y) {
             chunks[`${x},${y}`].backgroundElements[elementCoordinate(elementX, elementY)] = new Background(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [images.imageData.data[texData] - 40 + ~~(perlin * 150), images.imageData.data[texData + 1] - 40 + ~~(perlin * 150), images.imageData.data[texData + 2] - 40 + ~~(perlin * 150), 255]);
 
             if (perlin > 0.5) {
-
-                let texData2 = getWholeImageDataFromSpriteSheet(images.textures.stone2, texX, texY)
-
-                chunks[`${x},${y}`].elements[elementCoordinate(elementX, elementY)] = new Solid(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, [images.imageData.data[texData2] - 150 + ~~(perlin * 100), images.imageData.data[texData2 + 1] - 150 + ~~(perlin * 100), images.imageData.data[texData2 + 2] - 150 + ~~(perlin * 100), 255])
+                chunks[`${x},${y}`].elements[elementCoordinate(elementX, elementY)] = new Stone(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, ~~(perlin * 100), images.textures.stone2, texX, texY)
             }
         }
     }
@@ -314,8 +311,10 @@ class Chunk {
         for (let i = 0; i < filteredElements.length; i++) {
             let element = filteredElements[i];
             element.step();
-            element.conductHeatNearby();
         }
+        this.elements.filter(e => (e?.hasChangedTempRecently)).forEach(element => {
+            element.conductHeatNearby();
+        });
     }
 }
 
@@ -572,18 +571,36 @@ class Element {
         if (chunk) {
             let el = chunk.elements[elementCoordinate(elementX, elementY)];
             if (el) {
-                let thermalConductivity = Math.min(this.thermalConductivity, el.thermalConductivity) / 1000; // J / Ks
+                let thermalConductivity = Math.min(this.thermalConductivity, el.thermalConductivity) / 10;
 
                 let deltaTemp = this.temp - el.temp;
 
-                this.temp += (thermalConductivity * deltaTemp) / (1 * this.heatCapacity);
-                el.temp -= (thermalConductivity * deltaTemp) / (1 * el.heatCapacity);
+                let thisTempChange = -(thermalConductivity * deltaTemp) / (1 * this.heatCapacity)
+                this.temp += thisTempChange;
 
-                if (Math.abs((thermalConductivity * deltaTemp) / (1 * this.heatCapacity)) > 0.01) {
+                let elTempChange = (thermalConductivity * deltaTemp) / (1 * el.heatCapacity);
+                el.temp += elTempChange;
+
+                if (Math.abs(thisTempChange) > 0.01) {
                     this.hasChangedTempRecently = true;
+                    this.checkStateChange();
+
+                }
+                if (Math.abs(elTempChange) > 0.01) {
                     el.hasChangedTempRecently = true;
+                    el.checkStateChange();
+                }
+            } else {
+                let thermalConductivity = Math.min(this.thermalConductivity, 0.0212) / 10;
 
+                let deltaTemp = this.temp - 25;
 
+                let thisTempChange = -(thermalConductivity * deltaTemp) / (1 * this.heatCapacity)
+                this.temp += thisTempChange;
+
+                if (Math.abs(thisTempChange) > 0.01) {
+                    this.hasChangedTempRecently = true;
+                    this.checkStateChange();
                 }
             }
         }
@@ -591,17 +608,17 @@ class Element {
     checkStateChange() {
         if (this instanceof Gas) {
             if (this.temp < this.condensePoint) {
-
+                this.transformInto(this.condenseElement)
             }
         } else if (this instanceof Liquid) {
             if (this.temp < this.freezePoint) {
-
+                this.transformInto(this.freezeElement)
             } else if (this.temp > this.boilPoint) {
-
+                this.transformInto(this.boilElement)
             }
         } else if (this instanceof Solid) {
             if (this.temp > this.meltPoint) {
-
+                this.transformInto(this.meltElement)
             }
         }
     }
@@ -614,7 +631,7 @@ class Element {
 
 
         let chunk = chunks[`${chunkX},${chunkY}`];
-        chunk.elements[elementCoordinate(elementX, elementY)] = new type(elementX, elementY);
+        chunk.elements[elementCoordinate(elementX, elementY)] = new type(this.x, this.y);
         chunk.elements[elementCoordinate(elementX, elementY)].temp = this.temp;
 
         chunk.hasUpdatedSinceFrameBufferChange = true;
