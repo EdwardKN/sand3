@@ -18,7 +18,7 @@ const MOUSESIZE = 10;
 
 var chunkAmount = 0;
 
-const MINSIMULATEDATTIME = 15;
+const MINSIMULATEDATTIME = 50;
 const MAXMAXSIMULATEDATTIME = 200;
 var maxSimulatedAtTime = MAXMAXSIMULATEDATTIME;
 
@@ -129,7 +129,7 @@ function updateCursor() {
                     chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
                 } else if (tool == 5) {
                     let el = chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)];
-                    el.temp += 20;
+                    el.temp += 100;
                     el.hasChangedTempRecently = true;
                     el.checkStateChange();
                     chunks[`${chunkX},${chunkY}`].shouldStepNextFrame = true;
@@ -576,7 +576,11 @@ class Element {
         if (chunk) {
             let el = chunk.elements[elementCoordinate(elementX, elementY)];
             if (el) {
-                let thermalConductivity = Math.min(this.thermalConductivity, el.thermalConductivity) / 10;
+                let thermalConductivity = this.thermalConductivity / 10;
+
+                if (this.thermalConductivity > el.thermalConductivity) {
+                    thermalConductivity = el.thermalConductivity / 10;
+                }
 
                 let deltaTemp = this.temp - el.temp;
 
@@ -596,7 +600,11 @@ class Element {
                     el.checkStateChange();
                 }
             } else {
-                let thermalConductivity = Math.min(this.thermalConductivity, 0.0212) / 100;
+                let thermalConductivity = this.thermalConductivity / 100;
+
+                if (this.thermalConductivity > 0.0212) {
+                    thermalConductivity = 0.0212 / 100;
+                }
 
                 let deltaTemp = this.temp - 25;
 
