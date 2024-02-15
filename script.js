@@ -10,6 +10,8 @@ const PARTICLERENDER = true;
 
 const FPSTOHOLD = 55;
 
+const TEMPUPDATEINTERVAL = 1;
+
 var chunks = {};
 var particles = [];
 var player;
@@ -26,6 +28,10 @@ var particlesOnScreen = 0;
 
 var tool = 1;
 
+var currentFrame = 0;
+
+var realPerList = [];
+
 
 async function init() {
     await loadData();
@@ -41,6 +47,8 @@ async function update() {
     c.clearRect(0, 0, canvas.width, canvas.height);
 
     player.update();
+
+    currentFrame++;
 
     let per = performance.now();
 
@@ -60,9 +68,10 @@ async function update() {
 
     player.draw();
 
-    let realPer = performance.now() - per;
+    realPerList.unshift(performance.now() - per);
+    realPerList.splice(60, Infinity);
 
-    renderC.drawText(realPer, 10, 70, 50)
+    renderC.drawText((sum(realPerList) / 60).toFixed(1), 10, 70, 50)
 
     renderC.drawText(fps, 10, 140, 50)
 
@@ -130,15 +139,13 @@ function updateCursor() {
                     el.temp += 100;
                     el.hasChangedTempRecently = true;
                     el.checkStateChange();
-                    chunks[`${chunkX},${chunkY}`].shouldStepNextFrame = true;
-                    chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
+                    chunks[`${chunkX},${chunkY}`].shouldUpdateTempsNextTempFrame = true;
                 } else if (tool == 6) {
                     let el = chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)];
                     el.temp -= 10;
                     el.hasChangedTempRecently = true;
                     el.checkStateChange();
-                    chunks[`${chunkX},${chunkY}`].shouldStepNextFrame = true;
-                    chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
+                    chunks[`${chunkX},${chunkY}`].shouldUpdateTempsNextTempFrame = true;
                 }
             }
         }
@@ -220,6 +227,12 @@ async function updateChunks() {
     Object.values(chunks).forEach(e => {
         e.shiftShouldStepAndReset()
     });
+
+    if ((currentFrame % TEMPUPDATEINTERVAL) == 0) {
+        updateTemps();
+    }
+
+
     if (chunkAmount == maxSimulatedAtTime) {
         if (fps > FPSTOHOLD && maxSimulatedAtTime < MAXMAXSIMULATEDATTIME) {
             maxSimulatedAtTime++;
@@ -229,6 +242,24 @@ async function updateChunks() {
         maxSimulatedAtTime--;
         if (maxSimulatedAtTime < MINSIMULATEDATTIME) maxSimulatedAtTime = MINSIMULATEDATTIME;
     }
+}
+
+function updateTemps() {
+    let filteredTempsChunks = Object.values(chunks).filter(e => e.shouldUpdateTemps);
+    filteredTempsChunks = filteredTempsChunks.sort((a, b) => distance(a.x * CHUNKSIZE - canvas.width / 2, a.y * CHUNKSIZE - canvas.height / 2, player.camera.x, player.camera.y) - distance(b.x * CHUNKSIZE - canvas.width / 2, b.y * CHUNKSIZE - canvas.height / 2, player.camera.x, player.camera.y))
+    let notUpdatedTemps = filteredTempsChunks.splice(filteredTempsChunks, filteredTempsChunks.length - 100);
+    for (let i = 0; i < filteredTempsChunks.length; i += 2) {
+        let chunk = filteredTempsChunks[i];
+        chunk.updateTempsForElements();
+    }
+    for (let i = 1; i < filteredTempsChunks.length; i += 2) {
+        let chunk = filteredTempsChunks[i];
+        chunk.updateTempsForElements();
+    }
+    notUpdatedTemps.forEach(e => e.hasUpdatedTemps = false);
+    Object.values(chunks).forEach(e => {
+        e.shiftShouldUpdateTempAndReset()
+    });
 }
 
 class Chunk {
@@ -242,17 +273,22 @@ class Chunk {
         this.hasUpdatedSinceFrameBufferChange = true;
         this.elements = [];
         this.backgroundElements = [];
-    }
-    initElements() {
-        for (let i = 0; i < CHUNKSIZE; i++) {
-            this.elements.push(undefined);
-            this.backgroundElements.push(undefined);
-        }
+
+        this.shouldUpdateTemps = true;
+        this.shouldUpdateTempsNextTempFrame = true;
+        this.hasUpdatedTemps = true;
+
     }
     shiftShouldStepAndReset() {
         if (this.hasStepped) {
             this.shouldStep = this.shouldStepNextFrame;
             this.shouldStepNextFrame = false;
+        }
+    }
+    shiftShouldUpdateTempAndReset() {
+        if (this.hasUpdatedTemps) {
+            this.shouldUpdateTemps = this.shouldUpdateTempsNextTempFrame;
+            this.shouldUpdateTempsNextTempFrame = false;
         }
     }
     updateFrameBuffer() {
@@ -321,10 +357,15 @@ class Chunk {
             let element = filteredElements[i];
             element.step();
         }
+
+
+    }
+    updateTempsForElements() {
+        this.hasUpdatedTemps = true;
+        this.hasUpdatedSinceFrameBufferChange = true;
         this.elements.filter(e => (e?.hasChangedTempRecently)).forEach(element => {
             element.conductHeatNearby();
         });
-
     }
 }
 
@@ -530,6 +571,9 @@ class Element {
         chunks[`${newChunkX},${newChunkY}`].shouldStepNextFrame = true;
         chunks[`${this.chunkX},${this.chunkY}`].shouldStepNextFrame = true;
 
+        chunks[`${newChunkX},${newChunkY}`].shouldUpdateTempsNextTempFrame = true;
+        chunks[`${this.chunkX},${this.chunkY}`].shouldUpdateTempsNextTempFrame = true;
+
         if (!chunks[`${this.chunkX + 1},${this.chunkY}`]) { createNewChunk(this.chunkX + 1, this.chunkY) }
         if (!chunks[`${this.chunkX - 1},${this.chunkY}`]) { createNewChunk(this.chunkX - 1, this.chunkY) }
         if (!chunks[`${this.chunkX},${this.chunkY + 1}`]) { createNewChunk(this.chunkX, this.chunkY + 1) }
@@ -539,6 +583,11 @@ class Element {
         chunks[`${this.chunkX - 1},${this.chunkY}`].shouldStepNextFrame = true;
         chunks[`${this.chunkX},${this.chunkY + 1}`].shouldStepNextFrame = true;
         chunks[`${this.chunkX},${this.chunkY - 1}`].shouldStepNextFrame = true;
+        chunks[`${this.chunkX + 1},${this.chunkY}`].shouldUpdateTempsNextTempFrame = true;
+        chunks[`${this.chunkX - 1},${this.chunkY}`].shouldUpdateTempsNextTempFrame = true;
+        chunks[`${this.chunkX},${this.chunkY + 1}`].shouldUpdateTempsNextTempFrame = true;
+        chunks[`${this.chunkX},${this.chunkY - 1}`].shouldUpdateTempsNextTempFrame = true;
+
 
     }
     calculateRelativeXY() {
@@ -610,10 +659,10 @@ class Element {
     conductHeat(el) {
 
         if (el) {
-            let thermalConductivity = this.thermalConductivity / 10;
+            let thermalConductivity = (this.thermalConductivity / 10) * TEMPUPDATEINTERVAL;
 
             if (this.thermalConductivity > el.thermalConductivity) {
-                thermalConductivity = el.thermalConductivity / 10;
+                thermalConductivity = (el.thermalConductivity / 10) * TEMPUPDATEINTERVAL;
             }
 
             let deltaTemp = this.temp - el.temp;
@@ -628,11 +677,13 @@ class Element {
 
             if (Math.abs(thisTempChange) > 0.005) {
                 this.hasChangedTempRecently = true;
+                this.chunk.shouldUpdateTempsNextTempFrame = true;
                 this.checkStateChange();
 
             }
             if (Math.abs(elTempChange) > 0.005) {
                 el.hasChangedTempRecently = true;
+                el.chunk.shouldUpdateTempsNextTempFrame = true;
                 el.checkStateChange();
             }
         } else {
@@ -649,6 +700,7 @@ class Element {
 
             if (Math.abs(thisTempChange) > 0.005) {
                 this.hasChangedTempRecently = true;
+                this.chunk.shouldUpdateTempsNextTempFrame = true;
                 this.checkStateChange();
             }
         }
