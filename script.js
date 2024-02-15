@@ -386,8 +386,8 @@ class Particle {
 
                 while (getElementAtCell(this.drawX, this.drawY) !== undefined && whileTimes < MAXWHILE) {
                     whileTimes++;
-                    if (getElementAtCell(this.drawX, this.drawY) instanceof this.type && getElementAtCell(this.drawX, this.drawY - 1 * Math.sign(this.gravity)) instanceof this.type || getElementAtCell(this.drawX, this.drawY) instanceof this.type && getElementAtCell(this.drawX, this.drawY - 1 * Math.sign(this.gravity)) == undefined) {
-                        this.y -= 1 * Math.sign(this.gravity);
+                    if (getElementAtCell(this.drawX, this.drawY) instanceof this.type && getElementAtCell(this.drawX, this.drawY - 1) instanceof this.type || getElementAtCell(this.drawX, this.drawY) instanceof this.type && getElementAtCell(this.drawX, this.drawY - 1) == undefined) {
+                        this.y -= 1;
                         this.drawY = ~~this.y;
                     } else {
                         let shortestOkLeft = Infinity;
@@ -414,7 +414,7 @@ class Particle {
                         }
                         let random = Math.random();
                         if (moveUp) {
-                            this.y -= 1 * Math.sign(this.gravity);
+                            this.y -= 1;
                             this.drawY = ~~this.y;
                         } else if (random > 0.5 && (shortestOkLeft !== 0 && shortestOkLeft !== Infinity)) {
                             this.x -= shortestOkLeft;
@@ -422,7 +422,7 @@ class Particle {
                             if (getElementAtCell(this.drawX, this.drawY) === undefined) {
                                 break;
                             } else {
-                                this.y += 1 * Math.sign(this.gravity);
+                                this.y += 1;
                                 this.drawY = ~~this.y;
                             }
                         } else if (shortestOkRight !== 0 && shortestOkRight !== Infinity) {
@@ -431,7 +431,7 @@ class Particle {
                             if (getElementAtCell(this.drawX, this.drawY) === undefined) {
                                 break;
                             } else {
-                                this.y += 1 * Math.sign(this.gravity);
+                                this.y += 1;
                                 this.drawY = ~~this.y;
                             }
                         } else if (shortestOkLeft !== 0 && shortestOkLeft !== Infinity) {
@@ -440,11 +440,11 @@ class Particle {
                             if (getElementAtCell(this.drawX, this.drawY) === undefined) {
                                 break;
                             } else {
-                                this.y += 1 * Math.sign(this.gravity);
+                                this.y += 1;
                                 this.drawY = ~~this.y;
                             }
                         } else {
-                            this.y -= 1 * Math.sign(this.gravity);
+                            this.y -= 1;
                             this.drawY = ~~this.y;
                         }
                     }
