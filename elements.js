@@ -6,6 +6,7 @@ class Sand extends MovableSolid {
         this.outFlow = 0.3;
         this.outFlowFriction = 0.8;
         this.inertialResistance = 0.01;
+
         this.heatCapacity = 0.835;
         this.thermalConductivity = 0.27;
 
@@ -24,7 +25,7 @@ class Water extends Liquid {
         this.heatCapacity = 4.1816;
         this.thermalConductivity = 0.6233;
 
-        this.freezePoint = 0;
+        this.freezePoint = K;
         this.freezeElement = Ice;
 
         this.boilPoint = K + 100;
@@ -49,7 +50,7 @@ class Steam extends Gas {
 class Ice extends Solid {
     constructor(x, y) {
         let offset = randomIntFromRange(0, 30) - 15;
-        let col = [200 + offset, 200 + offset, 220 + offset / 2, 150];
+        let col = [180 + offset, 180 + offset, 220 + offset / 2, 200];
         super(x, y, col);
         this.heatCapacity = 2.05;
         this.thermalConductivity = 0.5551;

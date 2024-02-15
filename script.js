@@ -83,18 +83,18 @@ function updateCursor() {
     c.strokeStyle = "black";
     c.strokeRect(mouse.x - MOUSESIZE / 2, mouse.y - MOUSESIZE / 2, MOUSESIZE, MOUSESIZE);
 
-    /*
-    let x = ~~(mouse.x - ~~(MOUSESIZE / 2 - player.camera.x))
-    let y = ~~(mouse.y - ~~(MOUSESIZE / 2 - player.camera.y))
 
-    let chunkX = ((x - (x < 0 ? -1 : 0)) / CHUNKSIZE) + (x < 0 ? -1 : 0);
-    let chunkY = ((y - (y < 0 ? -1 : 0)) / CHUNKSIZE) + (y < 0 ? -1 : 0);
+    let x = ~~(mouse.x + ~~(player.camera.x));
+    let y = ~~(mouse.y + ~~(player.camera.y))
+
+    let chunkX = ~~((x - (x < 0 ? -1 : 0)) / CHUNKSIZE) + (x < 0 ? -1 : 0);
+    let chunkY = ~~((y - (y < 0 ? -1 : 0)) / CHUNKSIZE) + (y < 0 ? -1 : 0);
 
     let elementX = ((x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
     let elementY = ((y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
 
-    c.drawText(~~chunkY + "      " + ~~elementY, mouse.x, mouse.y)
-    */
+    c.drawText(~~(chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)]?.temp - K), mouse.x, mouse.y)
+
 
     if (mouse.down) {
         //mouse.down = false;
@@ -128,6 +128,13 @@ function updateCursor() {
                 } else if (tool == 5) {
                     let el = chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)];
                     el.temp += 100;
+                    el.hasChangedTempRecently = true;
+                    el.checkStateChange();
+                    chunks[`${chunkX},${chunkY}`].shouldStepNextFrame = true;
+                    chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
+                } else if (tool == 6) {
+                    let el = chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)];
+                    el.temp -= 10;
                     el.hasChangedTempRecently = true;
                     el.checkStateChange();
                     chunks[`${chunkX},${chunkY}`].shouldStepNextFrame = true;
@@ -619,12 +626,12 @@ class Element {
             let elTempChange = energyChange / el.heatCapacity;
             el.temp += elTempChange;
 
-            if (Math.abs(thisTempChange) > 0.01) {
+            if (Math.abs(thisTempChange) > 0.005) {
                 this.hasChangedTempRecently = true;
                 this.checkStateChange();
 
             }
-            if (Math.abs(elTempChange) > 0.01) {
+            if (Math.abs(elTempChange) > 0.005) {
                 el.hasChangedTempRecently = true;
                 el.checkStateChange();
             }
@@ -640,7 +647,7 @@ class Element {
             let thisTempChange = -(thermalConductivity * deltaTemp) / (1 * this.heatCapacity)
             this.temp += thisTempChange;
 
-            if (Math.abs(thisTempChange) > 0.01) {
+            if (Math.abs(thisTempChange) > 0.005) {
                 this.hasChangedTempRecently = true;
                 this.checkStateChange();
             }
