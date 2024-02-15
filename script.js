@@ -72,9 +72,7 @@ async function update() {
 
     renderC.drawText(particlesOnScreen, 10, 350, 50)
 
-    renderC.drawText(Object.values(chunks).length, 10, 420, 50)
-
-    renderC.drawText(tool, 10, 490, 10)
+    renderC.drawText(tool, 10, 420, 10)
 
     requestAnimationFrame(update);
 
@@ -311,14 +309,14 @@ class Chunk {
         this.hasStepped = true;
         this.hasUpdatedSinceFrameBufferChange = true;
         let filteredElements = shuffle(this.elements.filter(e => (e instanceof MovableSolid || e instanceof Liquid)));
-        this.elements.filter(e => (e?.hasChangedTempRecently)).forEach(element => {
-            element.conductHeatNearby();
-        });
 
         for (let i = 0; i < filteredElements.length; i++) {
             let element = filteredElements[i];
             element.step();
         }
+        this.elements.filter(e => (e?.hasChangedTempRecently)).forEach(element => {
+            element.conductHeatNearby();
+        });
 
     }
 }
@@ -327,7 +325,7 @@ class Particle {
     constructor(x, y, col, startVel = {
         x: 0,
         y: 0
-    }, grav = 0.1, type = Liquid, temp = 25) {
+    }, grav = 0.1, type = Liquid, temp = 25, ignoreType = Background) {
         this.x = x;
         this.y = y;
         this.drawX = x;
@@ -345,6 +343,8 @@ class Particle {
         this.type = type;
 
         this.temp = temp;
+
+        this.ignoreType = ignoreType;
     }
     updatePos() {
         this.vel.y += this.gravity;
@@ -375,7 +375,7 @@ class Particle {
             if (chunks[`${chunkX},${chunkY - 1}`]) chunks[`${chunkX},${chunkY - 1}`].hasUpdatedSinceFrameBufferChange = true;
             if (chunks[`${chunkX},${chunkY + 1}`]) chunks[`${chunkX},${chunkY + 1}`].hasUpdatedSinceFrameBufferChange = true;
 
-            if (getElementAtCell(this.drawX, this.drawY) !== undefined) {
+            if (getElementAtCell(this.drawX, this.drawY) !== undefined && !(getElementAtCell(this.drawX, this.drawY) instanceof this.ignoreType)) {
                 this.x -= this.vel.x;
                 this.y -= this.vel.y;
                 this.drawX = ~~this.x;
@@ -386,8 +386,8 @@ class Particle {
 
                 while (getElementAtCell(this.drawX, this.drawY) !== undefined && whileTimes < MAXWHILE) {
                     whileTimes++;
-                    if (getElementAtCell(this.drawX, this.drawY) instanceof this.type && getElementAtCell(this.drawX, this.drawY - 1) instanceof this.type || getElementAtCell(this.drawX, this.drawY) instanceof this.type && getElementAtCell(this.drawX, this.drawY - 1) == undefined) {
-                        this.y -= 1;
+                    if (getElementAtCell(this.drawX, this.drawY) instanceof this.type && getElementAtCell(this.drawX, this.drawY - 1 * Math.sign(this.gravity)) instanceof this.type || getElementAtCell(this.drawX, this.drawY) instanceof this.type && getElementAtCell(this.drawX, this.drawY - 1 * Math.sign(this.gravity)) == undefined) {
+                        this.y -= 1 * Math.sign(this.gravity);
                         this.drawY = ~~this.y;
                     } else {
                         let shortestOkLeft = Infinity;
@@ -414,7 +414,7 @@ class Particle {
                         }
                         let random = Math.random();
                         if (moveUp) {
-                            this.y -= 1;
+                            this.y -= 1 * Math.sign(this.gravity);
                             this.drawY = ~~this.y;
                         } else if (random > 0.5 && (shortestOkLeft !== 0 && shortestOkLeft !== Infinity)) {
                             this.x -= shortestOkLeft;
@@ -422,7 +422,7 @@ class Particle {
                             if (getElementAtCell(this.drawX, this.drawY) === undefined) {
                                 break;
                             } else {
-                                this.y += 1;
+                                this.y += 1 * Math.sign(this.gravity);
                                 this.drawY = ~~this.y;
                             }
                         } else if (shortestOkRight !== 0 && shortestOkRight !== Infinity) {
@@ -431,7 +431,7 @@ class Particle {
                             if (getElementAtCell(this.drawX, this.drawY) === undefined) {
                                 break;
                             } else {
-                                this.y += 1;
+                                this.y += 1 * Math.sign(this.gravity);
                                 this.drawY = ~~this.y;
                             }
                         } else if (shortestOkLeft !== 0 && shortestOkLeft !== Infinity) {
@@ -440,11 +440,11 @@ class Particle {
                             if (getElementAtCell(this.drawX, this.drawY) === undefined) {
                                 break;
                             } else {
-                                this.y += 1;
+                                this.y += 1 * Math.sign(this.gravity);
                                 this.drawY = ~~this.y;
                             }
                         } else {
-                            this.y -= 1;
+                            this.y -= 1 * Math.sign(this.gravity);
                             this.drawY = ~~this.y;
                         }
                     }
@@ -476,6 +476,7 @@ class Element {
     constructor(x, y, col) {
         this.x = x;
         this.y = y;
+
         this.col = col;
 
         this.velY = 1;
@@ -485,50 +486,62 @@ class Element {
         this.thermalConductivity = 1;
 
         this.hasChangedTempRecently = true;
+
+        this.calculateRelativeXY();
     }
     moveTo(x, y) {
-        let chunkX = ~~((this.x - (this.x < 0 ? -1 : 0)) / CHUNKSIZE) + (this.x < 0 ? -1 : 0);
-        let chunkY = ~~((this.y - (this.y < 0 ? -1 : 0)) / CHUNKSIZE) + (this.y < 0 ? -1 : 0);
 
         let newChunkX = ~~((x - (x < 0 ? -1 : 0)) / CHUNKSIZE) + (x < 0 ? -1 : 0);
         let newChunkY = ~~((y - (y < 0 ? -1 : 0)) / CHUNKSIZE) + (y < 0 ? -1 : 0);
 
-        let elementX = ((this.x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-        let elementY = ((this.y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+        let elementX = this.relativeX
+        let elementY = this.relativeY
 
         let newElementX = ((x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
         let newElementY = ((y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
 
         let elementOnNewPos = chunks[`${newChunkX},${newChunkY}`]?.elements[elementCoordinate(newElementX, newElementY)];
 
-        if (!chunks[`${chunkX},${chunkY}`]) { createNewChunk(chunkX, chunkY) }
+        if (!chunks[`${this.chunkX},${this.chunkY}`]) { createNewChunk(this.chunkX, chunkY) }
         if (!chunks[`${newChunkX},${newChunkY}`]) { createNewChunk(newChunkX, newChunkY) }
 
         if (elementOnNewPos) {
             elementOnNewPos.x = this.x;
             elementOnNewPos.y = this.y;
-            chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = elementOnNewPos;
+            chunks[`${this.chunkX},${this.chunkY}`].elements[elementCoordinate(elementX, elementY)] = elementOnNewPos;
+            elementOnNewPos.calculateRelativeXY();
         } else {
-            chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = undefined;
+            chunks[`${this.chunkX},${this.chunkY}`].elements[elementCoordinate(elementX, elementY)] = undefined;
         }
         this.x = x;
         this.y = y;
         this.setNearByToFreeFalling(x, y);
+        this.calculateRelativeXY();
 
         chunks[`${newChunkX},${newChunkY}`].elements[elementCoordinate(newElementX, newElementY)] = this;
 
         chunks[`${newChunkX},${newChunkY}`].shouldStepNextFrame = true;
-        chunks[`${chunkX},${chunkY}`].shouldStepNextFrame = true;
+        chunks[`${this.chunkX},${this.chunkY}`].shouldStepNextFrame = true;
 
-        if (!chunks[`${chunkX + 1},${chunkY}`]) { createNewChunk(chunkX + 1, chunkY) }
-        if (!chunks[`${chunkX - 1},${chunkY}`]) { createNewChunk(chunkX - 1, chunkY) }
-        if (!chunks[`${chunkX},${chunkY + 1}`]) { createNewChunk(chunkX, chunkY + 1) }
-        if (!chunks[`${chunkX},${chunkY - 1}`]) { createNewChunk(chunkX, chunkY - 1) }
+        if (!chunks[`${this.chunkX + 1},${this.chunkY}`]) { createNewChunk(this.chunkX + 1, this.chunkY) }
+        if (!chunks[`${this.chunkX - 1},${this.chunkY}`]) { createNewChunk(this.chunkX - 1, this.chunkY) }
+        if (!chunks[`${this.chunkX},${this.chunkY + 1}`]) { createNewChunk(this.chunkX, this.chunkY + 1) }
+        if (!chunks[`${this.chunkX},${this.chunkY - 1}`]) { createNewChunk(this.chunkX, this.chunkY - 1) }
 
-        chunks[`${chunkX + 1},${chunkY}`].shouldStepNextFrame = true;
-        chunks[`${chunkX - 1},${chunkY}`].shouldStepNextFrame = true;
-        chunks[`${chunkX},${chunkY + 1}`].shouldStepNextFrame = true;
-        chunks[`${chunkX},${chunkY - 1}`].shouldStepNextFrame = true;
+        chunks[`${this.chunkX + 1},${this.chunkY}`].shouldStepNextFrame = true;
+        chunks[`${this.chunkX - 1},${this.chunkY}`].shouldStepNextFrame = true;
+        chunks[`${this.chunkX},${this.chunkY + 1}`].shouldStepNextFrame = true;
+        chunks[`${this.chunkX},${this.chunkY - 1}`].shouldStepNextFrame = true;
+
+    }
+    calculateRelativeXY() {
+        this.relativeX = ((this.x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+        this.relativeY = ((this.y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+
+        this.chunkX = ~~((this.x - (this.x < 0 ? -1 : 0)) / CHUNKSIZE) + (this.x < 0 ? -1 : 0);
+        this.chunkY = ~~((this.y - (this.y < 0 ? -1 : 0)) / CHUNKSIZE) + (this.y < 0 ? -1 : 0);
+
+        this.chunk = chunks[`${this.chunkX},${this.chunkY}`];
 
     }
     convertToParticle(vel = { x: 0, y: 0 }, grav = 0.1) {
@@ -536,7 +549,7 @@ class Element {
         let chunkY = ~~((this.y - (this.y < 0 ? -1 : 0)) / CHUNKSIZE) + (this.y < 0 ? -1 : 0);
         let elementX = ((this.x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
         let elementY = ((this.y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-        particles.push(new Particle(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col, vel, grav, this.constructor, this.temp))
+        particles.push(new Particle(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col, vel, grav, this.constructor, this.temp, this.flowThrough))
         chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = undefined;
 
     }
@@ -562,61 +575,77 @@ class Element {
         }
     }
     conductHeatNearby() {
-        this.conductHeat(this.x, this.y - 1);
-        this.conductHeat(this.x, this.y + 1);
-        this.conductHeat(this.x + 1, this.y);
-        this.conductHeat(this.x - 1, this.y);
+        if (this.relativeX == 0) {
+            this.conductHeat(getElementAtCell(this.x - 1, this.y));
+        } else {
+            let el = this.chunk.elements[elementCoordinate(this.relativeX - 1, this.relativeY)]
+            this.conductHeat(el)
+        }
+        if (this.relativeX == CHUNKSIZE - 1) {
+            this.conductHeat(getElementAtCell(this.x + 1, this.y));
+        } else {
+            let el = this.chunk.elements[elementCoordinate(this.relativeX + 1, this.relativeY)]
+            this.conductHeat(el)
+        }
+        if (this.relativeY == 0) {
+            this.conductHeat(getElementAtCell(this.x, this.y - 1));
+        } else {
+            let el = this.chunk.elements[elementCoordinate(this.relativeX, this.relativeY - 1)]
+            this.conductHeat(el)
+        }
+        if (this.relativeY == CHUNKSIZE - 1) {
+            this.conductHeat(getElementAtCell(this.x, this.y + 1));
+        } else {
+            let el = this.chunk.elements[elementCoordinate(this.relativeX, this.relativeY + 1)]
+            this.conductHeat(el)
+        }
     }
-    conductHeat(x, y) {
-        let chunkX = ~~((x - (x < 0 ? -1 : 0)) / CHUNKSIZE) + (x < 0 ? -1 : 0);
-        let chunkY = ~~((y - (y < 0 ? -1 : 0)) / CHUNKSIZE) + (y < 0 ? -1 : 0);
-        let elementX = ((x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-        let elementY = ((y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-        let chunk = chunks[`${chunkX},${chunkY}`];
-        if (chunk) {
-            let el = chunk.elements[elementCoordinate(elementX, elementY)];
-            if (el) {
-                let thermalConductivity = this.thermalConductivity / 10;
+    conductHeat(el) {
 
-                if (this.thermalConductivity > el.thermalConductivity) {
-                    thermalConductivity = el.thermalConductivity / 10;
-                }
+        if (el) {
+            let thermalConductivity = this.thermalConductivity / 10;
 
-                let deltaTemp = this.temp - el.temp;
+            if (this.thermalConductivity > el.thermalConductivity) {
+                thermalConductivity = el.thermalConductivity / 10;
+            }
 
-                let thisTempChange = -(thermalConductivity * deltaTemp) / (1 * this.heatCapacity)
-                this.temp += thisTempChange;
+            let deltaTemp = this.temp - el.temp;
 
-                let elTempChange = (thermalConductivity * deltaTemp) / (1 * el.heatCapacity);
-                el.temp += elTempChange;
+            let energyChange = thermalConductivity * deltaTemp;
 
-                if (Math.abs(thisTempChange) > 0.01) {
-                    this.hasChangedTempRecently = true;
-                    this.checkStateChange();
+            let thisTempChange = -energyChange / this.heatCapacity;
+            this.temp += thisTempChange;
 
-                }
-                if (Math.abs(elTempChange) > 0.01) {
-                    el.hasChangedTempRecently = true;
-                    el.checkStateChange();
-                }
-            } else {
-                let thermalConductivity = this.thermalConductivity / 100;
+            let elTempChange = energyChange / el.heatCapacity;
+            el.temp += elTempChange;
 
-                if (this.thermalConductivity > 0.0212) {
-                    thermalConductivity = 0.0212 / 100;
-                }
+            if (Math.abs(thisTempChange) > 0.01) {
+                this.hasChangedTempRecently = true;
+                this.checkStateChange();
 
-                let deltaTemp = this.temp - 25;
+            }
+            if (Math.abs(elTempChange) > 0.01) {
+                el.hasChangedTempRecently = true;
+                el.checkStateChange();
+            }
+        } else {
+            let thermalConductivity = this.thermalConductivity / 100;
 
-                let thisTempChange = -(thermalConductivity * deltaTemp) / (1 * this.heatCapacity)
-                this.temp += thisTempChange;
+            if (this.thermalConductivity > 0.0212) {
+                thermalConductivity = 0.0212 / 100;
+            }
 
-                if (Math.abs(thisTempChange) > 0.01) {
-                    this.hasChangedTempRecently = true;
-                    this.checkStateChange();
-                }
+            let deltaTemp = this.temp - 25;
+
+            let thisTempChange = -(thermalConductivity * deltaTemp) / (1 * this.heatCapacity)
+            this.temp += thisTempChange;
+
+            if (Math.abs(thisTempChange) > 0.01) {
+                this.hasChangedTempRecently = true;
+                this.checkStateChange();
             }
         }
+
     }
     checkStateChange() {
         if (this instanceof Gas) {
@@ -636,19 +665,11 @@ class Element {
         }
     }
     transformInto(type) {
-        let chunkX = ~~((this.x - (this.x < 0 ? -1 : 0)) / CHUNKSIZE) + (this.x < 0 ? -1 : 0); 2
-        let chunkY = ~~((this.y - (this.y < 0 ? -1 : 0)) / CHUNKSIZE) + (this.y < 0 ? -1 : 0);
+        this.chunk.elements[elementCoordinate(this.relativeX, this.relativeY)] = new type(this.x, this.y);
+        this.chunk.elements[elementCoordinate(this.relativeX, this.relativeY)].temp = this.temp;
 
-        let elementX = ((this.x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-        let elementY = ((this.y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-
-
-        let chunk = chunks[`${chunkX},${chunkY}`];
-        chunk.elements[elementCoordinate(elementX, elementY)] = new type(this.x, this.y);
-        chunk.elements[elementCoordinate(elementX, elementY)].temp = this.temp;
-
-        chunk.hasUpdatedSinceFrameBufferChange = true;
-        chunk.shouldStepNextFrame = true;
+        this.chunk.hasUpdatedSinceFrameBufferChange = true;
+        this.chunk.shouldStepNextFrame = true;
 
     }
 
@@ -823,14 +844,15 @@ class Liquid extends Element {
         if (maxLeft !== 0 || maxRight !== 0) {
             if (maxLeft > maxRight) {
                 if (maxLeft > this.dispersionRate / 2 && detectCollision(this.x, this.y, 1, 1, ~~(player.camera.x), ~~(player.camera.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
-                    this.convertToParticle({ x: -randomFloatFromRange(0.5, 1), y: randomFloatFromRange(-0.5, -0.2) }, 0.1 * this.flowDir)
+                    this.convertToParticle({ x: -randomFloatFromRange(0.5, 1), y: randomFloatFromRange(-0.5 * this.flowDir, -0.2 * this.flowDir) }, 0.1 * this.flowDir)
+                    //this.moveTo(this.x - maxLeft, this.y)
                 } else {
                     this.moveTo(this.x - maxLeft, this.y)
                 }
             } else if (maxRight > maxLeft) {
                 if (maxRight > this.dispersionRate / 2 && detectCollision(this.x, this.y, 1, 1, ~~(player.camera.x), ~~(player.camera.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
-                    this.convertToParticle({ x: randomFloatFromRange(0.5, 1), y: randomFloatFromRange(-0.5, -0.2) }, 0.1 * this.flowDir)
-
+                    this.convertToParticle({ x: randomFloatFromRange(0.5, 1), y: randomFloatFromRange(-0.5 * this.flowDir, -0.2 * this.flowDir) }, 0.1 * this.flowDir)
+                    //this.moveTo(this.x + maxRight, this.y)
                 } else {
                     this.moveTo(this.x + maxRight, this.y)
                 }
@@ -846,6 +868,7 @@ class Gas extends Liquid {
         super(x, y, col);
         this.flowDir = -1;
         this.flowThrough = Liquid;
+        this.ignoreType = Liquid;
     }
 }
 

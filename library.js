@@ -314,7 +314,7 @@ async function loadSpriteSheet() {
 }
 async function loadImages() {
     spritesheet.frames.forEach((frame, i) => {
-        let tmp = frame.filename.replaceAll(".png", "").split("/");
+        let tmp = frame.filename.replace(".png", "").split("/");
         images[tmp[0]] = images[tmp[0]] ?? {}
         images[tmp[0]][tmp[1]] = frame.frame;
     });
