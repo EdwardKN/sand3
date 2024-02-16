@@ -10,7 +10,7 @@ const PARTICLERENDER = true;
 
 const FPSTOHOLD = 55;
 
-const TEMPUPDATEINTERVAL = 1;
+const TEMPUPDATESPERINTERVAL = 1;
 
 var chunks = {};
 var particles = [];
@@ -228,9 +228,11 @@ async function updateChunks() {
         e.shiftShouldStepAndReset()
     });
 
-    if ((currentFrame % TEMPUPDATEINTERVAL) == 0) {
-        updateTemps();
+    if ((currentFrame % TEMPUPDATESPERINTERVAL) == 0) {
+        splitTempChunksToUpdate();
     }
+    updateTemps();
+
 
 
     if (chunkAmount == maxSimulatedAtTime) {
@@ -244,20 +246,31 @@ async function updateChunks() {
     }
 }
 
-function updateTemps() {
-    let filteredTempsChunks = Object.values(chunks).filter(e => e.shouldUpdateTemps);
+var filteredTempsChunksInParts = [];
+function splitTempChunksToUpdate() {
+    filteredTempsChunksInParts = [];
+    let filteredTempsChunks = [];
+    filteredTempsChunks = Object.values(chunks).filter(e => e.shouldUpdateTemps);
     filteredTempsChunks = filteredTempsChunks.sort((a, b) => distance(a.x * CHUNKSIZE - canvas.width / 2, a.y * CHUNKSIZE - canvas.height / 2, player.camera.x, player.camera.y) - distance(b.x * CHUNKSIZE - canvas.width / 2, b.y * CHUNKSIZE - canvas.height / 2, player.camera.x, player.camera.y))
-    let notUpdatedTemps = filteredTempsChunks.splice(filteredTempsChunks, filteredTempsChunks.length - 100);
-    for (let i = 0; i < filteredTempsChunks.length; i += 2) {
-        let chunk = filteredTempsChunks[i];
+
+    let length = (filteredTempsChunks.length);
+    while (filteredTempsChunks.length > 0) {
+        filteredTempsChunksInParts.push(filteredTempsChunks.splice(0, ~~(length / TEMPUPDATESPERINTERVAL)));
+    }
+}
+
+function updateTemps() {
+    let chunklist = filteredTempsChunksInParts[(currentFrame % TEMPUPDATESPERINTERVAL)];
+
+    for (let i = 0; i < chunklist.length; i += 2) {
+        let chunk = chunklist[i];
         chunk.updateTempsForElements();
     }
-    for (let i = 1; i < filteredTempsChunks.length; i += 2) {
-        let chunk = filteredTempsChunks[i];
+    for (let i = 1; i < chunklist.length; i += 2) {
+        let chunk = chunklist[i];
         chunk.updateTempsForElements();
     }
-    notUpdatedTemps.forEach(e => e.hasUpdatedTemps = false);
-    Object.values(chunks).forEach(e => {
+    Object.values(chunklist).forEach(e => {
         e.shiftShouldUpdateTempAndReset()
     });
 }
@@ -659,10 +672,10 @@ class Element {
     conductHeat(el) {
 
         if (el) {
-            let thermalConductivity = (this.thermalConductivity / 10) * TEMPUPDATEINTERVAL;
+            let thermalConductivity = (this.thermalConductivity / 10) * TEMPUPDATESPERINTERVAL;
 
             if (this.thermalConductivity > el.thermalConductivity) {
-                thermalConductivity = (el.thermalConductivity / 10) * TEMPUPDATEINTERVAL;
+                thermalConductivity = (el.thermalConductivity / 10) * TEMPUPDATESPERINTERVAL;
             }
 
             let deltaTemp = this.temp - el.temp;
