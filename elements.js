@@ -42,6 +42,8 @@ class Steam extends Gas {
         this.heatCapacity = 2.03;
         this.thermalConductivity = 0.6797;
 
+        this.grav = 0.2;
+
         this.condensePoint = K + 100;
         this.condenseElement = Water;
 

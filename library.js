@@ -993,6 +993,8 @@ function shuffle(unshuffled, saveValues = false) {
     if (saveValues) return values
     else return shuffled
 }
+fastShuffle = arr => arr.reduceRight((r, _, __, s) =>
+    (r.push(s.splice(0 | Math.random() * s.length, 1)[0]), r), [])
 
 function riggedShuffle(unshuffled, values) {
     return unshuffled

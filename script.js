@@ -8,6 +8,12 @@ const TRANS = true;
 
 const PARTICLERENDER = true;
 
+const PARTICLES = true;
+
+const TEMPERATURECONDUCTING = true;
+
+const THERMALCONDUCTIVITYMULTIPLIER = 0.1;
+
 const FPSTOHOLD = 55;
 
 var chunks = {};
@@ -34,6 +40,8 @@ async function init() {
     fixCanvas();
     update();
 }
+
+var perArr = [];
 async function update() {
     renderC.imageSmoothingEnabled = false;
 
@@ -60,9 +68,10 @@ async function update() {
 
     player.draw();
 
-    let realPer = performance.now() - per;
+    perArr.unshift(performance.now() - per);
+    perArr.splice(60, 100);
 
-    renderC.drawText(realPer, 10, 70, 50)
+    renderC.drawText((sum(perArr) / 60).toFixed(1), 10, 70, 50)
 
     renderC.drawText(fps, 10, 140, 50)
 
@@ -260,25 +269,49 @@ class Chunk {
         for (let x = 0; x < CHUNKSIZE; x++) {
             for (let y = 0; y < CHUNKSIZE; y++) {
                 let coord = elementCoordinate(x, y);
-                let el = this.elements[coord] || undefined;
+                let el = this.elements[coord];
                 let backgroundEL = this.backgroundElements[coord];
                 let dataIndex = coord * 4;
                 if (!el) {
-                    for (let i = 0; i < 4; i++) {
-                        this.frameBuffer.data[dataIndex + i] = backgroundEL?.col[i] || 255;
+                    if (backgroundEL) {
+                        for (let i = 0; i < 4; i++) {
+                            this.frameBuffer.data[dataIndex + i] = backgroundEL.col[i];
+                        }
+                    } else {
+                        for (let i = 0; i < 4; i++) {
+                            this.frameBuffer.data[dataIndex + i] = 255;
+                        }
                     }
+
                 } else if (TRANS) {
-                    let aa = el?.col[3] / 255;
-                    let ab = (backgroundEL?.col[3] || 255) / 255;
+                    let aa = el.col[3] / 255;
+                    let ab;
+                    if (backgroundEL) {
+                        ab = backgroundEL.col[3] / 255;
+                    } else {
+                        ab = 1;
+                    }
+                    let a0 = aa + ab * (1 - aa);
+
+                    let combinedA = (ab * (1 - aa)) / a0
+
                     let targetCell = true;
+                    let remover = 0;
                     if (el instanceof Liquid) {
                         targetCell = elementCoordinate(x, y - 1) > 0 ? (this.elements[elementCoordinate(x, y - 1)]) : chunks[`${this.x},${this.y - 1}`].elements[elementCoordinate(x, CHUNKSIZE - 1)];
+                        if (targetCell == undefined) {
+                            remover = 80;
+                        }
                     }
                     for (let i = 0; i < 3; i++) {
-                        let ca = el?.col[i] - ((targetCell == undefined) ? 80 : 0);
-                        let cb = backgroundEL?.col[i] || 255;
-                        let a0 = aa + ab * (1 - aa);
-                        this.frameBuffer.data[dataIndex + i] = (ca * aa + cb * ab * (1 - aa)) / a0;
+                        let ca = el.col[i] - remover;
+                        let cb;
+                        if (backgroundEL) {
+                            cb = backgroundEL.col[i];
+                        } else {
+                            cb = backgroundEL.col[i];
+                        }
+                        this.frameBuffer.data[dataIndex + i] = ca * aa + cb * combinedA;
                     }
 
                     this.frameBuffer.data[dataIndex + 3] = 255;
@@ -315,16 +348,17 @@ class Chunk {
     updateElements() {
         this.hasStepped = true;
         this.hasUpdatedSinceFrameBufferChange = true;
-        let filteredElements = shuffle(this.elements.filter(e => (e instanceof MovableSolid || e instanceof Liquid)));
+        let filteredElements = fastShuffle(this.elements.filter(e => e && !e.unMovable));
 
         for (let i = 0; i < filteredElements.length; i++) {
             let element = filteredElements[i];
             element.step();
         }
-        this.elements.filter(e => (e?.hasChangedTempRecently)).forEach(element => {
-            element.conductHeatNearby();
-        });
-
+        if (TEMPERATURECONDUCTING) {
+            this.elements.filter(e => (e && e.hasChangedTempRecently)).forEach(element => {
+                element.conductHeatNearby();
+            });
+        }
     }
 }
 
@@ -489,15 +523,16 @@ class Element {
         this.velY = 1;
 
         this.temp = K + 25;
-        this.heatCapacity = 1;
+        this.heatCapacity = 1; 2
         this.thermalConductivity = 1;
 
         this.hasChangedTempRecently = true;
 
+        this.unMovable = true;
+
         this.calculateRelativeXY();
     }
     moveTo(x, y) {
-
         let newChunkX = ~~((x - (x < 0 ? -1 : 0)) / CHUNKSIZE) + (x < 0 ? -1 : 0);
         let newChunkY = ~~((y - (y < 0 ? -1 : 0)) / CHUNKSIZE) + (y < 0 ? -1 : 0);
 
@@ -560,65 +595,35 @@ class Element {
         chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = undefined;
 
     }
-    setNearByToFreeFalling(x, y) {
-        this.setToFreeFalling(x + 1, y)
-        this.setToFreeFalling(x, y + 1)
-        this.setToFreeFalling(x, y - 1)
-        this.setToFreeFalling(x - 1, y)
+    setNearByToFreeFalling() {
+        getElementAtCell(0, 1, this)?.setToFreeFalling();
+        getElementAtCell(0, -1, this)?.setToFreeFalling();
+        getElementAtCell(1, 0, this)?.setToFreeFalling();
+        getElementAtCell(-1, 0, this)?.setToFreeFalling();
     }
-    setToFreeFalling(x, y) {
-        let chunkX = ~~((x - (x < 0 ? -1 : 0)) / CHUNKSIZE) + (x < 0 ? -1 : 0);
-        let chunkY = ~~((y - (y < 0 ? -1 : 0)) / CHUNKSIZE) + (y < 0 ? -1 : 0);
-        let elementX = ((x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-        let elementY = ((y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-        let chunk = chunks[`${chunkX},${chunkY}`];
-        if (chunk) {
-            let el = chunk.elements[elementCoordinate(elementX, elementY)];
-            if (el) {
-                if (el instanceof MovableSolid) {
-                    if (Math.random() > el.inertialResistance) el.newFreeFalling = true;
-                }
-            }
+    setToFreeFalling() {
+        if (this instanceof MovableSolid) {
+            if (Math.random() > this.inertialResistance) this.newFreeFalling = true;
         }
     }
     conductHeatNearby() {
-        if (this.relativeX == 0) {
-            this.conductHeat(getElementAtCell(this.x - 1, this.y));
-        } else {
-            let el = this.chunk.elements[elementCoordinate(this.relativeX - 1, this.relativeY)]
-            this.conductHeat(el)
-        }
-        if (this.relativeX == CHUNKSIZE - 1) {
-            this.conductHeat(getElementAtCell(this.x + 1, this.y));
-        } else {
-            let el = this.chunk.elements[elementCoordinate(this.relativeX + 1, this.relativeY)]
-            this.conductHeat(el)
-        }
-        if (this.relativeY == 0) {
-            this.conductHeat(getElementAtCell(this.x, this.y - 1));
-        } else {
-            let el = this.chunk.elements[elementCoordinate(this.relativeX, this.relativeY - 1)]
-            this.conductHeat(el)
-        }
-        if (this.relativeY == CHUNKSIZE - 1) {
-            this.conductHeat(getElementAtCell(this.x, this.y + 1));
-        } else {
-            let el = this.chunk.elements[elementCoordinate(this.relativeX, this.relativeY + 1)]
-            this.conductHeat(el)
-        }
+        this.conductHeat(getElementAtCell(1, 0, this));
+        this.conductHeat(getElementAtCell(-1, 0, this));
+        this.conductHeat(getElementAtCell(0, 1, this));
+        this.conductHeat(getElementAtCell(0, -1, this));
     }
     conductHeat(el) {
 
         if (el) {
-            let thermalConductivity = this.thermalConductivity / 10;
+            let thermalConductivity = this.thermalConductivity;
 
-            if (this.thermalConductivity > el.thermalConductivity) {
-                thermalConductivity = el.thermalConductivity / 10;
+            if (thermalConductivity > el.thermalConductivity) {
+                thermalConductivity = el.thermalConductivity;
             }
 
             let deltaTemp = this.temp - el.temp;
 
-            let energyChange = thermalConductivity * deltaTemp;
+            let energyChange = thermalConductivity * deltaTemp * THERMALCONDUCTIVITYMULTIPLIER;
 
             let thisTempChange = -energyChange / this.heatCapacity;
             this.temp += thisTempChange;
@@ -626,46 +631,53 @@ class Element {
             let elTempChange = energyChange / el.heatCapacity;
             el.temp += elTempChange;
 
-            if (Math.abs(thisTempChange) > 0.005) {
+            if (thisTempChange > 0.05 || thisTempChange < -0.05) {
                 this.hasChangedTempRecently = true;
+                this.chunk.shouldStepNextFrame = true;
                 this.checkStateChange();
 
             }
-            if (Math.abs(elTempChange) > 0.005) {
+            if (elTempChange > 0.05 || elTempChange < -0.05) {
                 el.hasChangedTempRecently = true;
+                el.chunk.shouldStepNextFrame = true;
                 el.checkStateChange();
             }
         } else {
-            let thermalConductivity = this.thermalConductivity / 100;
+            let thermalConductivity = this.thermalConductivity;
 
-            if (this.thermalConductivity > 0.0212) {
-                thermalConductivity = 0.0212 / 100;
+            if (thermalConductivity > 0.0212) {
+                thermalConductivity = 0.0212;
             }
 
-            let deltaTemp = this.temp - 25;
+            let deltaTemp = this.temp - (K + 25);
 
-            let thisTempChange = -(thermalConductivity * deltaTemp) / (1 * this.heatCapacity)
+            let energyChange = thermalConductivity * deltaTemp * THERMALCONDUCTIVITYMULTIPLIER;
+
+            let thisTempChange = -energyChange / this.heatCapacity;
             this.temp += thisTempChange;
 
-            if (Math.abs(thisTempChange) > 0.005) {
+            if (thisTempChange > 0.05 || thisTempChange < -0.05) {
                 this.hasChangedTempRecently = true;
+                this.chunk.shouldStepNextFrame = true;
                 this.checkStateChange();
             }
         }
 
     }
     checkStateChange() {
-        if (this instanceof Gas) {
+        if (this.condensePoint) {
             if (this.temp < this.condensePoint) {
                 this.transformInto(this.condenseElement)
             }
-        } else if (this instanceof Liquid) {
+        } else if (this.freezePoint) {
             if (this.temp < this.freezePoint) {
                 this.transformInto(this.freezeElement)
-            } else if (this.temp > this.boilPoint) {
-                this.transformInto(this.boilElement)
+            } else if (this.boilPoint) {
+                if (this.temp > this.boilPoint) {
+                    this.transformInto(this.boilElement)
+                }
             }
-        } else if (this instanceof Solid) {
+        } else if (this.meltPoint) {
             if (this.temp > this.meltPoint) {
                 this.transformInto(this.meltElement)
             }
@@ -688,7 +700,6 @@ class Background extends Element {
 }
 
 class Solid extends Element {
-
 }
 
 class MovableSolid extends Solid {
@@ -704,7 +715,7 @@ class MovableSolid extends Solid {
     }
     step() {
         this.isFreeFalling = this.newFreeFalling;
-        let targetCell = getElementAtCell(this.x, this.y + 1);
+        let targetCell = getElementAtCell(0, 1, this);
         if (targetCell == undefined || targetCell instanceof Liquid) {
             this.lookVertically();
         } else if (this.isFreeFalling) {
@@ -731,8 +742,8 @@ class MovableSolid extends Solid {
         let rightMaxed = false;
         let maxAmount = ~~(this.velX) + 1;
         for (let i = 1; i < maxAmount; i++) {
-            let targetCell1 = getElementAtCell(this.x + i, this.y);
-            let targetCell2 = getElementAtCell(this.x - i, this.y);
+            let targetCell1 = getElementAtCell(i, 0, this);
+            let targetCell2 = getElementAtCell(- i, 0, this);
             if (!rightMaxed) {
                 if ((targetCell1 || targetCell1 instanceof Liquid) == undefined) {
                     maxRight = i
@@ -764,7 +775,7 @@ class MovableSolid extends Solid {
     lookVertically() {
         let maxDir = 0;
         for (let i = 1; i < ~~this.velY + 1; i++) {
-            let targetCell = getElementAtCell(this.x, this.y + i);
+            let targetCell = getElementAtCell(0, i, this);
             if (targetCell == undefined || targetCell instanceof Liquid) {
                 maxDir = i;
             } else {
@@ -772,7 +783,7 @@ class MovableSolid extends Solid {
             }
         }
         if (maxDir !== 0) {
-            let targetCell = getElementAtCell(this.x, this.y + maxDir);
+            let targetCell = getElementAtCell(0, maxDir, this);
 
             this.velY += 0.1;
             if (targetCell instanceof Liquid) this.velY = Math.min(this.velY, 1);
@@ -781,7 +792,7 @@ class MovableSolid extends Solid {
         }
     }
     lookDiagonally(dir, first) {
-        let targetCell = getElementAtCell(this.x + dir, this.y + 1);
+        let targetCell = getElementAtCell(dir, 1, this);
 
         if (targetCell == undefined || targetCell instanceof Liquid) {
             this.moveTo(this.x + dir, this.y + 1);
@@ -796,9 +807,13 @@ class Liquid extends Element {
         this.flowDir = 1;
         this.flowThrough = Gas;
         this.flowChance = 1;
+
+        this.unMovable = false;
+
+        this.grav = 0.1;
     }
     step() {
-        let targetCell = getElementAtCell(this.x, this.y + 1 * this.flowDir);
+        let targetCell = getElementAtCell(0, 1 * this.flowDir, this);
         if (targetCell == undefined || (targetCell instanceof this.flowThrough && !(targetCell instanceof this.constructor))) {
             this.lookVertically();
         } else if (true || Math.random() < this.flowChance) {
@@ -809,15 +824,15 @@ class Liquid extends Element {
     lookVertically() {
         let maxDir = 0;
         for (let i = 1; i < ~~this.velY + 1; i++) {
-            let targetCell = getElementAtCell(this.x, this.y + i * this.flowDir);
-            if (targetCell == undefined || targetCell instanceof this.flowThrough && !(targetCell instanceof this.constructor)) {
+            let targetCell = getElementAtCell(0, i * this.flowDir, this);
+            if (targetCell == undefined || (targetCell instanceof this.flowThrough && !(targetCell instanceof this.constructor))) {
                 maxDir = i
             } else {
                 i = Infinity;
             }
         }
         if (maxDir !== 0) {
-            this.velY += 0.1;
+            this.velY += this.grav;
             this.moveTo(this.x, this.y + maxDir * this.flowDir)
         }
     }
@@ -828,8 +843,8 @@ class Liquid extends Element {
         let rightMaxed = false;
         let maxAmount = this.dispersionRate;
         for (let i = 1; i < maxAmount; i++) {
-            let targetCell1 = getElementAtCell(this.x + i, this.y);
-            let targetCell2 = getElementAtCell(this.x - i, this.y);
+            let targetCell1 = getElementAtCell(i, 0, this);
+            let targetCell2 = getElementAtCell(-i, 0, this);
             if (!rightMaxed) {
                 if (targetCell1 == undefined || targetCell1 instanceof this.flowThrough && !(targetCell1 instanceof this.constructor)) {
                     maxRight = i
@@ -850,16 +865,14 @@ class Liquid extends Element {
         }
         if (maxLeft !== 0 || maxRight !== 0) {
             if (maxLeft > maxRight) {
-                if (maxLeft > this.dispersionRate / 2 && detectCollision(this.x, this.y, 1, 1, ~~(player.camera.x), ~~(player.camera.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
+                if (PARTICLES && maxLeft > this.dispersionRate / 2 && detectCollision(this.x, this.y, 1, 1, ~~(player.camera.x), ~~(player.camera.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
                     this.convertToParticle({ x: -randomFloatFromRange(0.5, 1), y: randomFloatFromRange(-0.5 * this.flowDir, -0.2 * this.flowDir) }, 0.1 * this.flowDir)
-                    //this.moveTo(this.x - maxLeft, this.y)
                 } else {
                     this.moveTo(this.x - maxLeft, this.y)
                 }
             } else if (maxRight > maxLeft) {
-                if (maxRight > this.dispersionRate / 2 && detectCollision(this.x, this.y, 1, 1, ~~(player.camera.x), ~~(player.camera.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
+                if (PARTICLES && maxRight > this.dispersionRate / 2 && detectCollision(this.x, this.y, 1, 1, ~~(player.camera.x), ~~(player.camera.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
                     this.convertToParticle({ x: randomFloatFromRange(0.5, 1), y: randomFloatFromRange(-0.5 * this.flowDir, -0.2 * this.flowDir) }, 0.1 * this.flowDir)
-                    //this.moveTo(this.x + maxRight, this.y)
                 } else {
                     this.moveTo(this.x + maxRight, this.y)
                 }
@@ -999,18 +1012,30 @@ function elementCoordinate(x, y) {
     return y * CHUNKSIZE + x;
 }
 
-function getElementAtCell(x, y) {
-    let chunkX = ~~((x - (x < 0 ? -1 : 0)) / CHUNKSIZE) + (x < 0 ? -1 : 0);
-    let chunkY = ~~((y - (y < 0 ? -1 : 0)) / CHUNKSIZE) + (y < 0 ? -1 : 0);
+function getElementAtCell(x, y, startElement) {
+    if (startElement !== undefined) {
+        let relativeX = startElement.relativeX + x;
+        let relativeY = startElement.relativeY + y;
+        if (relativeX >= 0 && relativeX < CHUNKSIZE && relativeY >= 0 && relativeY < CHUNKSIZE) {
+            let el = startElement.chunk.elements[elementCoordinate(relativeX, relativeY)]
+            return el;
+        } else {
+            return getElementAtCell(startElement.x + x, startElement.y + y);
 
-    let elementX = ((x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-    let elementY = ((y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+        }
+    } else {
+        let chunkX = ~~((x - (x < 0 ? -1 : 0)) / CHUNKSIZE) + (x < 0 ? -1 : 0);
+        let chunkY = ~~((y - (y < 0 ? -1 : 0)) / CHUNKSIZE) + (y < 0 ? -1 : 0);
 
-    let elementCoordinateValue = elementCoordinate(elementX, elementY);
+        let elementX = ((x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+        let elementY = ((y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
 
-    let chunkKey = `${chunkX},${chunkY}`;
+        let elementCoordinateValue = elementCoordinate(elementX, elementY);
 
-    return chunks[chunkKey]?.elements[elementCoordinateValue];
+        let chunkKey = `${chunkX},${chunkY}`;
+
+        return chunks[chunkKey]?.elements[elementCoordinateValue];
+    }
 }
 function getPerlinNoise(x, y, perlinSeed, resolution) {
     noise.seed(perlinSeed);
