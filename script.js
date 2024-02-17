@@ -14,6 +14,9 @@ const TEMPERATURECONDUCTING = true;
 
 const THERMALCONDUCTIVITYMULTIPLIER = 0.1;
 
+const RENDERHEATMAP = false;
+const HEATMAPINTENSITY = 0.5;
+
 const FPSTOHOLD = 55;
 
 var chunks = {};
@@ -272,25 +275,21 @@ class Chunk {
                 let el = this.elements[coord];
                 let backgroundEL = this.backgroundElements[coord];
                 let dataIndex = coord * 4;
-                if (!el) {
+                if (el === undefined) {
                     if (backgroundEL) {
-                        for (let i = 0; i < 4; i++) {
+                        for (let i = 0; i < 3; i++) {
                             this.frameBuffer.data[dataIndex + i] = backgroundEL.col[i];
                         }
+                        this.frameBuffer.data[dataIndex + 3] = 255;
                     } else {
                         for (let i = 0; i < 4; i++) {
                             this.frameBuffer.data[dataIndex + i] = 255;
                         }
                     }
 
-                } else if (TRANS) {
+                } else if (!RENDERHEATMAP && TRANS) {
                     let aa = el.col[3] / 255;
-                    let ab;
-                    if (backgroundEL) {
-                        ab = backgroundEL.col[3] / 255;
-                    } else {
-                        ab = 1;
-                    }
+                    let ab = 1;
                     let a0 = aa + ab * (1 - aa);
 
                     let combinedA = (ab * (1 - aa)) / a0
@@ -314,6 +313,12 @@ class Chunk {
                         this.frameBuffer.data[dataIndex + i] = ca * aa + cb * combinedA;
                     }
 
+                    this.frameBuffer.data[dataIndex + 3] = 255;
+                } else if (RENDERHEATMAP) {
+                    let heatmap = valueToRGBRrange(0, 1500, ~~el.temp)
+                    this.frameBuffer.data[dataIndex] = ~~(heatmap.r * HEATMAPINTENSITY + el.col[0] * (1 - HEATMAPINTENSITY));
+                    this.frameBuffer.data[dataIndex + 1] = ~~(heatmap.g * HEATMAPINTENSITY + el.col[1] * (1 - HEATMAPINTENSITY));
+                    this.frameBuffer.data[dataIndex + 2] = ~~(heatmap.b * HEATMAPINTENSITY + el.col[2] * (1 - HEATMAPINTENSITY));
                     this.frameBuffer.data[dataIndex + 3] = 255;
                 } else {
                     for (let i = 0; i < 4; i++) {
@@ -366,7 +371,7 @@ class Particle {
     constructor(x, y, col, startVel = {
         x: 0,
         y: 0
-    }, grav = 0.1, type = Liquid, temp = 25, ignoreType = Background) {
+    }, grav = 0.1, type, temp = 25) {
         this.x = x;
         this.y = y;
         this.drawX = x;
@@ -384,8 +389,6 @@ class Particle {
         this.type = type;
 
         this.temp = temp;
-
-        this.ignoreType = ignoreType;
     }
     updatePos() {
         this.vel.y += this.gravity;
@@ -416,11 +419,13 @@ class Particle {
             if (chunks[`${chunkX},${chunkY - 1}`]) chunks[`${chunkX},${chunkY - 1}`].hasUpdatedSinceFrameBufferChange = true;
             if (chunks[`${chunkX},${chunkY + 1}`]) chunks[`${chunkX},${chunkY + 1}`].hasUpdatedSinceFrameBufferChange = true;
 
-            if (getElementAtCell(this.drawX, this.drawY) !== undefined && !(getElementAtCell(this.drawX, this.drawY) instanceof this.ignoreType)) {
+            if (getElementAtCell(this.drawX, this.drawY) !== undefined) {
                 this.x -= this.vel.x;
                 this.y -= this.vel.y;
                 this.drawX = ~~this.x;
                 this.drawY = ~~this.y;
+                this.vel.x = -this.vel.x;
+                this.vel.y = -this.vel.y;
 
                 let whileTimes = 0;
                 const MAXWHILE = 20;
@@ -490,24 +495,29 @@ class Particle {
                         }
                     }
                 }
-
-                this.convertToElement();
+                if (getElementAtCell(this.drawX, this.drawY) === undefined) {
+                    this.convertToElement();
+                }
             }
         }
     }
     convertToElement() {
-        let chunkX = ~~((this.drawX - (this.drawX < 0 ? -1 : 0)) / CHUNKSIZE) + (this.drawX < 0 ? -1 : 0);
-        let chunkY = ~~((this.drawY - (this.drawY < 0 ? -1 : 0)) / CHUNKSIZE) + (this.drawY < 0 ? -1 : 0);
+        if (this.type) {
+            let chunkX = ~~((this.drawX - (this.drawX < 0 ? -1 : 0)) / CHUNKSIZE) + (this.drawX < 0 ? -1 : 0);
+            let chunkY = ~~((this.drawY - (this.drawY < 0 ? -1 : 0)) / CHUNKSIZE) + (this.drawY < 0 ? -1 : 0);
 
-        let elementX = ((this.drawX % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-        let elementY = ((this.drawY % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-        let chunk = chunks[`${chunkX},${chunkY}`];
-        if (!chunk) { createNewChunk(chunkX, chunkY) }
-        chunk.elements[elementCoordinate(elementX, elementY)] = new this.type(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col);
-        chunk.elements[elementCoordinate(elementX, elementY)].temp = this.temp;
+            let elementX = ((this.drawX % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+            let elementY = ((this.drawY % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
+            let chunk = chunks[`${chunkX},${chunkY}`];
+            if (!chunk) { createNewChunk(chunkX, chunkY) }
+            if (!chunk.elements[elementCoordinate(elementX, elementY)]) {
+                chunk.elements[elementCoordinate(elementX, elementY)] = new this.type(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col);
+                chunk.elements[elementCoordinate(elementX, elementY)].temp = this.temp;
 
-        chunk.hasUpdatedSinceFrameBufferChange = true;
-        chunk.shouldStepNextFrame = true;
+                chunk.hasUpdatedSinceFrameBufferChange = true;
+                chunk.shouldStepNextFrame = true;
+            }
+        }
 
         particles.splice(particles.indexOf(this), 1)
     }
@@ -586,12 +596,12 @@ class Element {
         this.chunk = chunks[`${this.chunkX},${this.chunkY}`];
 
     }
-    convertToParticle(vel = { x: 0, y: 0 }, grav = 0.1) {
+    convertToParticle(vel = { x: 0, y: 0 }) {
         let chunkX = ~~((this.x - (this.x < 0 ? -1 : 0)) / CHUNKSIZE) + (this.x < 0 ? -1 : 0);
         let chunkY = ~~((this.y - (this.y < 0 ? -1 : 0)) / CHUNKSIZE) + (this.y < 0 ? -1 : 0);
         let elementX = ((this.x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
         let elementY = ((this.y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-        particles.push(new Particle(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col, vel, grav, this.constructor, this.temp, this.flowThrough))
+        particles.push(new Particle(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col, vel, this.grav * this.flowDir, this.constructor, this.temp))
         chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = undefined;
 
     }
@@ -712,6 +722,7 @@ class MovableSolid extends Solid {
             x: x,
             y: y
         };
+        this.unMovable = false;
     }
     step() {
         this.isFreeFalling = this.newFreeFalling;
@@ -866,13 +877,13 @@ class Liquid extends Element {
         if (maxLeft !== 0 || maxRight !== 0) {
             if (maxLeft > maxRight) {
                 if (PARTICLES && maxLeft > this.dispersionRate / 2 && detectCollision(this.x, this.y, 1, 1, ~~(player.camera.x), ~~(player.camera.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
-                    this.convertToParticle({ x: -randomFloatFromRange(0.5, 1), y: randomFloatFromRange(-0.5 * this.flowDir, -0.2 * this.flowDir) }, 0.1 * this.flowDir)
+                    this.convertToParticle({ x: -randomFloatFromRange(0.5, 1), y: randomFloatFromRange(-0.5 * this.flowDir, -0.2 * this.flowDir) })
                 } else {
                     this.moveTo(this.x - maxLeft, this.y)
                 }
             } else if (maxRight > maxLeft) {
                 if (PARTICLES && maxRight > this.dispersionRate / 2 && detectCollision(this.x, this.y, 1, 1, ~~(player.camera.x), ~~(player.camera.y), STANDARDX * RENDERSCALE, STANDARDY * RENDERSCALE)) {
-                    this.convertToParticle({ x: randomFloatFromRange(0.5, 1), y: randomFloatFromRange(-0.5 * this.flowDir, -0.2 * this.flowDir) }, 0.1 * this.flowDir)
+                    this.convertToParticle({ x: randomFloatFromRange(0.5, 1), y: randomFloatFromRange(-0.5 * this.flowDir, -0.2 * this.flowDir) })
                 } else {
                     this.moveTo(this.x + maxRight, this.y)
                 }
@@ -888,7 +899,6 @@ class Gas extends Liquid {
         super(x, y, col);
         this.flowDir = -1;
         this.flowThrough = Liquid;
-        this.ignoreType = Liquid;
     }
 }
 

@@ -1011,3 +1011,13 @@ function fixAngle(angle) {
 }
 
 const K = 272.15;
+
+function valueToRGBRrange(minimum, maximum, value) {
+    let ratio = 2 * (value - minimum) / (maximum - minimum)
+
+    let b = ~~(Math.max(0, 255 * (1 - ratio)))
+    let r = ~~(Math.max(0, 255 * (ratio - 1)))
+    let g = 255 - b - r
+    return { r: r, g: g, b: b }
+
+}
