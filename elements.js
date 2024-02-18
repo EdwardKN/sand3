@@ -111,3 +111,4 @@ class Basalt extends MovableSolid {
         this.meltElement = Lava;
     }
 }
+

@@ -1,6 +1,5 @@
 const CHUNKSIZE = 32;
 const TEXTURESIZE = 128;
-const ELEMENTSIZE = 2; // gör inget i nuläget. har planer
 
 const SIMULATIONSTEPSPERFRAME = 1;
 
@@ -12,12 +11,16 @@ const PARTICLES = true;
 
 const TEMPERATURECONDUCTING = true;
 
-const THERMALCONDUCTIVITYMULTIPLIER = 0.1;
+const TEMPUPDATEINTERVAL = 5; // INSTABIL ÖVER 7
+const THERMALCONDUCTIVITYMULTIPLIER = 0.1 * TEMPUPDATEINTERVAL;
 
-const RENDERHEATMAP = false;
-const HEATMAPINTENSITY = 0.5;
+const HEATMAPINTENSITY = 0;
+const RENDERHEATMAP = HEATMAPINTENSITY > 0;
 
 const FPSTOHOLD = 55;
+
+
+var currentFrame = 0;
 
 var chunks = {};
 var particles = [];
@@ -88,6 +91,7 @@ async function update() {
 
     requestAnimationFrame(update);
 
+    currentFrame++;
 };
 
 function updateCursor() {
@@ -122,7 +126,21 @@ function updateCursor() {
             let elementY = ((y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
 
             if (chunks[`${chunkX},${chunkY}`]) {
-                if (!chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)]) {
+                if (tool == 5) {
+                    let el = chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)];
+                    el.temp += 100;
+                    el.hasChangedTempRecently = true;
+                    el.checkStateChange();
+                    chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
+                    chunks[`${chunkX},${chunkY}`].shouldStepNextFrame = true;
+                } else if (tool == 6) {
+                    let el = chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)];
+                    el.temp -= 10;
+                    el.hasChangedTempRecently = true;
+                    el.checkStateChange();
+                    chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
+                    chunks[`${chunkX},${chunkY}`].shouldStepNextFrame = true;
+                } else if ((chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] instanceof Air)) {
                     if (tool == 1) {
                         chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new Water(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY);
                     } else if (tool == 2) {
@@ -134,22 +152,8 @@ function updateCursor() {
                     chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
                     chunks[`${chunkX},${chunkY}`].shouldStepNextFrame = true;
                 } else if (tool == 3) {
-                    chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = undefined;
+                    chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new Air(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY);
 
-                    chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
-                } else if (tool == 5) {
-                    let el = chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)];
-                    el.temp += 100;
-                    el.hasChangedTempRecently = true;
-                    el.checkStateChange();
-                    chunks[`${chunkX},${chunkY}`].shouldStepNextFrame = true;
-                    chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
-                } else if (tool == 6) {
-                    let el = chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)];
-                    el.temp -= 10;
-                    el.hasChangedTempRecently = true;
-                    el.checkStateChange();
-                    chunks[`${chunkX},${chunkY}`].shouldStepNextFrame = true;
                     chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
                 }
             }
@@ -188,6 +192,9 @@ function drawVisibleChunks() {
 
 function createNewChunk(x, y) {
     chunks[`${x},${y}`] = new Chunk(x, y)
+    chunks[`${x},${y}`].initElements();
+
+
     for (let elementX = 0; elementX < CHUNKSIZE; elementX++) {
         for (let elementY = 0; elementY < CHUNKSIZE; elementY++) {
             let perlin = getPerlinLayers(x * CHUNKSIZE + elementX, y * CHUNKSIZE + elementY, 20, [100, 50], [5, 1])
@@ -254,11 +261,11 @@ class Chunk {
         this.hasUpdatedSinceFrameBufferChange = true;
         this.elements = [];
         this.backgroundElements = [];
+
     }
     initElements() {
-        for (let i = 0; i < CHUNKSIZE; i++) {
-            this.elements.push(undefined);
-            this.backgroundElements.push(undefined);
+        for (let i = 0; i < Math.pow(CHUNKSIZE, 2); i++) {
+            this.elements.push(new Air(this.x * CHUNKSIZE + i % CHUNKSIZE, this.y * CHUNKSIZE + ~~(i / CHUNKSIZE)));
         }
     }
     shiftShouldStepAndReset() {
@@ -275,7 +282,20 @@ class Chunk {
                 let el = this.elements[coord];
                 let backgroundEL = this.backgroundElements[coord];
                 let dataIndex = coord * 4;
-                if (el === undefined) {
+                if (RENDERHEATMAP) {
+                    let heatmap = valueToRGBRrange(0, 600, ~~el.temp)
+                    if (el instanceof Air) {
+                        this.frameBuffer.data[dataIndex] = ~~(heatmap.r * HEATMAPINTENSITY + backgroundEL.col[0] * (1 - HEATMAPINTENSITY));
+                        this.frameBuffer.data[dataIndex + 1] = ~~(heatmap.g * HEATMAPINTENSITY + backgroundEL.col[1] * (1 - HEATMAPINTENSITY));
+                        this.frameBuffer.data[dataIndex + 2] = ~~(heatmap.b * HEATMAPINTENSITY + backgroundEL.col[2] * (1 - HEATMAPINTENSITY));
+                    } else {
+                        this.frameBuffer.data[dataIndex] = ~~(heatmap.r * HEATMAPINTENSITY + el.col[0] * (1 - HEATMAPINTENSITY));
+                        this.frameBuffer.data[dataIndex + 1] = ~~(heatmap.g * HEATMAPINTENSITY + el.col[1] * (1 - HEATMAPINTENSITY));
+                        this.frameBuffer.data[dataIndex + 2] = ~~(heatmap.b * HEATMAPINTENSITY + el.col[2] * (1 - HEATMAPINTENSITY));
+                    }
+
+                    this.frameBuffer.data[dataIndex + 3] = 255;
+                } else if (el instanceof Air) {
                     if (backgroundEL) {
                         for (let i = 0; i < 3; i++) {
                             this.frameBuffer.data[dataIndex + i] = backgroundEL.col[i];
@@ -287,7 +307,7 @@ class Chunk {
                         }
                     }
 
-                } else if (!RENDERHEATMAP && TRANS) {
+                } else if (TRANS) {
                     let aa = el.col[3] / 255;
                     let ab = 1;
                     let a0 = aa + ab * (1 - aa);
@@ -298,7 +318,7 @@ class Chunk {
                     let remover = 0;
                     if (el instanceof Liquid) {
                         targetCell = elementCoordinate(x, y - 1) > 0 ? (this.elements[elementCoordinate(x, y - 1)]) : chunks[`${this.x},${this.y - 1}`].elements[elementCoordinate(x, CHUNKSIZE - 1)];
-                        if (targetCell == undefined) {
+                        if (targetCell instanceof Air) {
                             remover = 80;
                         }
                     }
@@ -313,12 +333,6 @@ class Chunk {
                         this.frameBuffer.data[dataIndex + i] = ca * aa + cb * combinedA;
                     }
 
-                    this.frameBuffer.data[dataIndex + 3] = 255;
-                } else if (RENDERHEATMAP) {
-                    let heatmap = valueToRGBRrange(0, 1500, ~~el.temp)
-                    this.frameBuffer.data[dataIndex] = ~~(heatmap.r * HEATMAPINTENSITY + el.col[0] * (1 - HEATMAPINTENSITY));
-                    this.frameBuffer.data[dataIndex + 1] = ~~(heatmap.g * HEATMAPINTENSITY + el.col[1] * (1 - HEATMAPINTENSITY));
-                    this.frameBuffer.data[dataIndex + 2] = ~~(heatmap.b * HEATMAPINTENSITY + el.col[2] * (1 - HEATMAPINTENSITY));
                     this.frameBuffer.data[dataIndex + 3] = 255;
                 } else {
                     for (let i = 0; i < 4; i++) {
@@ -360,10 +374,15 @@ class Chunk {
             element.step();
         }
         if (TEMPERATURECONDUCTING) {
-            this.elements.filter(e => (e && e.hasChangedTempRecently)).forEach(element => {
-                element.conductHeatNearby();
-            });
+            if (((this.x - currentFrame) % TEMPUPDATEINTERVAL == 0)) {
+                fastShuffle(this.elements.filter(e => (e && e.hasChangedTempRecently))).forEach(element => {
+                    element.conductHeatNearby();
+                });
+            } else {
+                this.shouldStepNextFrame = true;
+            }
         }
+
     }
 }
 
@@ -371,7 +390,7 @@ class Particle {
     constructor(x, y, col, startVel = {
         x: 0,
         y: 0
-    }, grav = 0.1, type, temp = 25) {
+    }, grav = 0.1, type, realType, temp = 25) {
         this.x = x;
         this.y = y;
         this.drawX = x;
@@ -386,7 +405,8 @@ class Particle {
 
         this.vel = startVel;
 
-        this.type = type;
+        this.realType = realType;
+        this.type = type || realType;
 
         this.temp = temp;
     }
@@ -419,7 +439,7 @@ class Particle {
             if (chunks[`${chunkX},${chunkY - 1}`]) chunks[`${chunkX},${chunkY - 1}`].hasUpdatedSinceFrameBufferChange = true;
             if (chunks[`${chunkX},${chunkY + 1}`]) chunks[`${chunkX},${chunkY + 1}`].hasUpdatedSinceFrameBufferChange = true;
 
-            if (getElementAtCell(this.drawX, this.drawY) !== undefined) {
+            if (!(getElementAtCell(this.drawX, this.drawY) instanceof Air)) {
                 this.x -= this.vel.x;
                 this.y -= this.vel.y;
                 this.drawX = ~~this.x;
@@ -430,9 +450,9 @@ class Particle {
                 let whileTimes = 0;
                 const MAXWHILE = 20;
 
-                while (getElementAtCell(this.drawX, this.drawY) !== undefined && whileTimes < MAXWHILE) {
+                while (!(getElementAtCell(this.drawX, this.drawY) instanceof Air) && whileTimes < MAXWHILE) {
                     whileTimes++;
-                    if (getElementAtCell(this.drawX, this.drawY) instanceof this.type && getElementAtCell(this.drawX, this.drawY - 1) instanceof this.type || getElementAtCell(this.drawX, this.drawY) instanceof this.type && getElementAtCell(this.drawX, this.drawY - 1) == undefined) {
+                    if (getElementAtCell(this.drawX, this.drawY) instanceof this.type && getElementAtCell(this.drawX, this.drawY - 1) instanceof this.type || (getElementAtCell(this.drawX, this.drawY) instanceof this.type && getElementAtCell(this.drawX, this.drawY - 1) == undefined)) {
                         this.y -= 1;
                         this.drawY = ~~this.y;
                     } else {
@@ -444,15 +464,15 @@ class Particle {
                             let random = Math.random();
                             let targetCell1 = getElementAtCell(this.drawX - i, this.drawY);
                             let targetCell2 = getElementAtCell(this.drawX + i, this.drawY);
-                            if (random > 0.5 && (targetCell1 === undefined || targetCell1 instanceof this.type)) {
+                            if (random > 0.5 && (targetCell1 instanceof Air || targetCell1 instanceof this.type)) {
                                 shortestOkLeft = i;
                                 shortestOkRight = 0;
                                 i = Infinity;
-                            } else if (targetCell2 === undefined || targetCell2 instanceof this.type) {
+                            } else if (targetCell2 instanceof Air || targetCell2 instanceof this.type) {
                                 shortestOkLeft = 0;
                                 shortestOkRight = i;
                                 i = Infinity;
-                            } else if (targetCell1 === undefined || targetCell1 instanceof this.type) {
+                            } else if (targetCell1 instanceof Air || targetCell1 instanceof this.type) {
                                 shortestOkLeft = i;
                                 shortestOkRight = 0;
                                 i = Infinity;
@@ -465,7 +485,7 @@ class Particle {
                         } else if (random > 0.5 && (shortestOkLeft !== 0 && shortestOkLeft !== Infinity)) {
                             this.x -= shortestOkLeft;
                             this.drawX = ~~this.x;
-                            if (getElementAtCell(this.drawX, this.drawY) === undefined) {
+                            if (getElementAtCell(this.drawX, this.drawY) instanceof Air) {
                                 break;
                             } else {
                                 this.y += 1;
@@ -474,7 +494,7 @@ class Particle {
                         } else if (shortestOkRight !== 0 && shortestOkRight !== Infinity) {
                             this.x += shortestOkRight;
                             this.drawX = ~~this.x;
-                            if (getElementAtCell(this.drawX, this.drawY) === undefined) {
+                            if (getElementAtCell(this.drawX, this.drawY) instanceof Air) {
                                 break;
                             } else {
                                 this.y += 1;
@@ -483,7 +503,7 @@ class Particle {
                         } else if (shortestOkLeft !== 0 && shortestOkLeft !== Infinity) {
                             this.x -= shortestOkLeft;
                             this.drawX = ~~this.x;
-                            if (getElementAtCell(this.drawX, this.drawY) === undefined) {
+                            if (getElementAtCell(this.drawX, this.drawY) instanceof Air) {
                                 break;
                             } else {
                                 this.y += 1;
@@ -495,7 +515,7 @@ class Particle {
                         }
                     }
                 }
-                if (getElementAtCell(this.drawX, this.drawY) === undefined) {
+                if (getElementAtCell(this.drawX, this.drawY) instanceof Air) {
                     this.convertToElement();
                 }
             }
@@ -510,8 +530,8 @@ class Particle {
             let elementY = ((this.drawY % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
             let chunk = chunks[`${chunkX},${chunkY}`];
             if (!chunk) { createNewChunk(chunkX, chunkY) }
-            if (!chunk.elements[elementCoordinate(elementX, elementY)]) {
-                chunk.elements[elementCoordinate(elementX, elementY)] = new this.type(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col);
+            if (chunk.elements[elementCoordinate(elementX, elementY)] instanceof Air) {
+                chunk.elements[elementCoordinate(elementX, elementY)] = new this.realType(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col);
                 chunk.elements[elementCoordinate(elementX, elementY)].temp = this.temp;
 
                 chunk.hasUpdatedSinceFrameBufferChange = true;
@@ -557,14 +577,11 @@ class Element {
         if (!chunks[`${this.chunkX},${this.chunkY}`]) { createNewChunk(this.chunkX, chunkY) }
         if (!chunks[`${newChunkX},${newChunkY}`]) { createNewChunk(newChunkX, newChunkY) }
 
-        if (elementOnNewPos) {
-            elementOnNewPos.x = this.x;
-            elementOnNewPos.y = this.y;
-            chunks[`${this.chunkX},${this.chunkY}`].elements[elementCoordinate(elementX, elementY)] = elementOnNewPos;
-            elementOnNewPos.calculateRelativeXY();
-        } else {
-            chunks[`${this.chunkX},${this.chunkY}`].elements[elementCoordinate(elementX, elementY)] = undefined;
-        }
+        elementOnNewPos.x = this.x;
+        elementOnNewPos.y = this.y;
+        chunks[`${this.chunkX},${this.chunkY}`].elements[elementCoordinate(elementX, elementY)] = elementOnNewPos;
+        elementOnNewPos.calculateRelativeXY();
+
         this.x = x;
         this.y = y;
         this.setNearByToFreeFalling(x, y);
@@ -601,8 +618,8 @@ class Element {
         let chunkY = ~~((this.y - (this.y < 0 ? -1 : 0)) / CHUNKSIZE) + (this.y < 0 ? -1 : 0);
         let elementX = ((this.x % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
         let elementY = ((this.y % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
-        particles.push(new Particle(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col, vel, this.grav * this.flowDir, this.constructor, this.temp))
-        chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = undefined;
+        particles.push(new Particle(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col, vel, this.grav * this.flowDir, this?.type, this.constructor, this.temp))
+        chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new Air(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY);
 
     }
     setNearByToFreeFalling() {
@@ -617,20 +634,40 @@ class Element {
         }
     }
     conductHeatNearby() {
-        this.conductHeat(getElementAtCell(1, 0, this));
-        this.conductHeat(getElementAtCell(-1, 0, this));
-        this.conductHeat(getElementAtCell(0, 1, this));
-        this.conductHeat(getElementAtCell(0, -1, this));
+        let el1 = getElementAtCell(1, 0, this);
+        let el2 = getElementAtCell(-1, 0, this);
+        let el3 = getElementAtCell(0, 1, this);
+        let el4 = getElementAtCell(0, -1, this)
+
+        let random = Math.random();
+        if (random > 0.5) {
+            this.conductHeat(el4, -1);
+        }
+        if (Math.random() > 0.5) {
+            this.conductHeat(el1, 0);
+            this.conductHeat(el2, 0);
+        } else {
+            this.conductHeat(el2, 0);
+            this.conductHeat(el1, 0);
+        }
+        if (random < 0.5) {
+            this.conductHeat(el4, -1);
+        }
+        this.conductHeat(el3, 1);
     }
-    conductHeat(el) {
-
-        if (el) {
+    conductHeat(el, moveY) {
+        if (moveY <= 0 && el instanceof Air && this instanceof Air && el.temp < this.temp) {
+            let elTemp = el.temp;
+            el.temp = this.temp;
+            this.temp = elTemp;
+            this.hasChangedTempRecently = true;
+            this.chunk.shouldStepNextFrame = true;
+            this.checkStateChange();
+        } else if (el) {
             let thermalConductivity = this.thermalConductivity;
-
             if (thermalConductivity > el.thermalConductivity) {
                 thermalConductivity = el.thermalConductivity;
             }
-
             let deltaTemp = this.temp - el.temp;
 
             let energyChange = thermalConductivity * deltaTemp * THERMALCONDUCTIVITYMULTIPLIER;
@@ -645,49 +682,28 @@ class Element {
                 this.hasChangedTempRecently = true;
                 this.chunk.shouldStepNextFrame = true;
                 this.checkStateChange();
-
             }
             if (elTempChange > 0.05 || elTempChange < -0.05) {
                 el.hasChangedTempRecently = true;
                 el.chunk.shouldStepNextFrame = true;
                 el.checkStateChange();
             }
-        } else {
-            let thermalConductivity = this.thermalConductivity;
-
-            if (thermalConductivity > 0.0212) {
-                thermalConductivity = 0.0212;
-            }
-
-            let deltaTemp = this.temp - (K + 25);
-
-            let energyChange = thermalConductivity * deltaTemp * THERMALCONDUCTIVITYMULTIPLIER;
-
-            let thisTempChange = -energyChange / this.heatCapacity;
-            this.temp += thisTempChange;
-
-            if (thisTempChange > 0.05 || thisTempChange < -0.05) {
-                this.hasChangedTempRecently = true;
-                this.chunk.shouldStepNextFrame = true;
-                this.checkStateChange();
-            }
         }
-
     }
     checkStateChange() {
-        if (this.condensePoint) {
+        if (this.condensePoint !== undefined) {
             if (this.temp < this.condensePoint) {
                 this.transformInto(this.condenseElement)
             }
-        } else if (this.freezePoint) {
+        } else if (this.freezePoint !== undefined) {
             if (this.temp < this.freezePoint) {
                 this.transformInto(this.freezeElement)
-            } else if (this.boilPoint) {
+            } else if (this.boilPoint !== undefined) {
                 if (this.temp > this.boilPoint) {
                     this.transformInto(this.boilElement)
                 }
             }
-        } else if (this.meltPoint) {
+        } else if (this.meltPoint !== undefined) {
             if (this.temp > this.meltPoint) {
                 this.transformInto(this.meltElement)
             }
@@ -705,11 +721,21 @@ class Element {
 
 }
 
+
+
 class Background extends Element {
 
 }
 
 class Solid extends Element {
+}
+
+class Air extends Element {
+    constructor(x, y) {
+        super(x, y);
+        this.thermalConductivity = 0.0212;
+        this.heatCapacity = 1.012;
+    }
 }
 
 class MovableSolid extends Solid {
@@ -727,7 +753,7 @@ class MovableSolid extends Solid {
     step() {
         this.isFreeFalling = this.newFreeFalling;
         let targetCell = getElementAtCell(0, 1, this);
-        if (targetCell == undefined || targetCell instanceof Liquid) {
+        if (targetCell instanceof Air || targetCell instanceof Liquid) {
             this.lookVertically();
         } else if (this.isFreeFalling) {
             this.lookDiagonally(~~(Math.random() * 2) || -1, true);
@@ -756,14 +782,14 @@ class MovableSolid extends Solid {
             let targetCell1 = getElementAtCell(i, 0, this);
             let targetCell2 = getElementAtCell(- i, 0, this);
             if (!rightMaxed) {
-                if ((targetCell1 || targetCell1 instanceof Liquid) == undefined) {
+                if (targetCell1 instanceof Air || targetCell1 instanceof Liquid) {
                     maxRight = i
                 } else {
                     rightMaxed = true;
                 }
             }
             if (!leftMaxed) {
-                if ((targetCell2 == undefined || targetCell2 instanceof Liquid) && !leftMaxed) {
+                if ((targetCell2 instanceof Air || targetCell2 instanceof Liquid) && !leftMaxed) {
                     maxLeft = i
                 } else {
                     leftMaxed = true;
@@ -787,7 +813,7 @@ class MovableSolid extends Solid {
         let maxDir = 0;
         for (let i = 1; i < ~~this.velY + 1; i++) {
             let targetCell = getElementAtCell(0, i, this);
-            if (targetCell == undefined || targetCell instanceof Liquid) {
+            if (targetCell instanceof Air || targetCell instanceof Liquid) {
                 maxDir = i;
             } else {
                 i = Infinity;
@@ -805,7 +831,7 @@ class MovableSolid extends Solid {
     lookDiagonally(dir, first) {
         let targetCell = getElementAtCell(dir, 1, this);
 
-        if (targetCell == undefined || targetCell instanceof Liquid) {
+        if (targetCell instanceof Air || targetCell instanceof Liquid) {
             this.moveTo(this.x + dir, this.y + 1);
         } else if (first == true) {
             this.lookDiagonally(-dir, false);
@@ -817,6 +843,7 @@ class Liquid extends Element {
         super(x, y, col);
         this.flowDir = 1;
         this.flowThrough = Gas;
+        this.type = Liquid;
         this.flowChance = 1;
 
         this.unMovable = false;
@@ -825,9 +852,9 @@ class Liquid extends Element {
     }
     step() {
         let targetCell = getElementAtCell(0, 1 * this.flowDir, this);
-        if (targetCell == undefined || (targetCell instanceof this.flowThrough && !(targetCell instanceof this.constructor))) {
+        if (targetCell instanceof Air || (targetCell instanceof this.flowThrough && !(targetCell instanceof this.constructor))) {
             this.lookVertically();
-        } else if (true || Math.random() < this.flowChance) {
+        } else if (Math.random() < this.flowChance) {
             this.velY = 1;
             this.lookHorizontally();
         }
@@ -836,7 +863,7 @@ class Liquid extends Element {
         let maxDir = 0;
         for (let i = 1; i < ~~this.velY + 1; i++) {
             let targetCell = getElementAtCell(0, i * this.flowDir, this);
-            if (targetCell == undefined || (targetCell instanceof this.flowThrough && !(targetCell instanceof this.constructor))) {
+            if (targetCell instanceof Air || (targetCell instanceof this.flowThrough && !(targetCell instanceof this.constructor))) {
                 maxDir = i
             } else {
                 i = Infinity;
@@ -857,14 +884,14 @@ class Liquid extends Element {
             let targetCell1 = getElementAtCell(i, 0, this);
             let targetCell2 = getElementAtCell(-i, 0, this);
             if (!rightMaxed) {
-                if (targetCell1 == undefined || targetCell1 instanceof this.flowThrough && !(targetCell1 instanceof this.constructor)) {
+                if (targetCell1 instanceof Air || targetCell1 instanceof this.flowThrough && !(targetCell1 instanceof this.constructor)) {
                     maxRight = i
                 } else {
                     rightMaxed = true;
                 }
             }
             if (!leftMaxed) {
-                if ((targetCell2 == undefined || targetCell2 instanceof this.flowThrough && !(targetCell2 instanceof this.constructor)) && !leftMaxed) {
+                if ((targetCell2 instanceof Air || targetCell2 instanceof this.flowThrough && !(targetCell2 instanceof this.constructor)) && !leftMaxed) {
                     maxLeft = i
                 } else {
                     leftMaxed = true;
@@ -965,7 +992,7 @@ class Player {
             let x = xValue;
             let y = yValue + i;
             let el = getElementAtCell(x, y);
-            if (el && !(el instanceof Liquid)) {
+            if (!(el instanceof Liquid || el instanceof Air)) {
                 this.x -= this.vx - 0.01;
                 this.vx = 0;
             };
@@ -974,7 +1001,7 @@ class Player {
             let x = xValue + i;
             let y = yValue;
             let el = getElementAtCell(x, y);
-            if (el && !(el instanceof Liquid)) {
+            if (!(el instanceof Liquid || el instanceof Air)) {
                 this.y -= this.vy - 0.1;
                 this.vy = -this.vy * this.roofPowerBack;
             } else if (el instanceof Liquid && !(el instanceof Gas)) {
@@ -985,7 +1012,7 @@ class Player {
             let x = xValue + this.width;
             let y = yValue + i;
             let el = getElementAtCell(x, y);
-            if (el && !(el instanceof Liquid)) {
+            if (!(el instanceof Liquid || el instanceof Air)) {
                 this.x -= this.vx + 0.01;
                 this.vx = 0;
             };
@@ -994,19 +1021,19 @@ class Player {
             let x = xValue + i;
             let y = yValue + this.height - 1;
             let el = getElementAtCell(x, y);
-            if (el && !(el instanceof Liquid)) {
+            if (!(el instanceof Liquid || el instanceof Air)) {
                 this.y -= this.vy + 0.1;
                 this.vy = 0;
             } else if (el instanceof Liquid && !(el instanceof Gas)) {
                 this.vy *= this.waterLoss;
             };
         };
-        if (getElementAtCell(~~(xValue), ~~(yValue + this.height)) !== undefined && !(getElementAtCell(~~(xValue), ~~(yValue + this.height)) instanceof Gas) || getElementAtCell(~~(xValue + this.width - 1), ~~(yValue + this.height)) !== undefined && !(getElementAtCell(~~(xValue + this.width - 1), ~~(yValue + this.height)) instanceof Gas)) {
+        if (!(getElementAtCell(~~(xValue), ~~(yValue + this.height)) instanceof Air) && !(getElementAtCell(~~(xValue), ~~(yValue + this.height)) instanceof Gas) || !(getElementAtCell(~~(xValue + this.width - 1), ~~(yValue + this.height)) instanceof Air) && !(getElementAtCell(~~(xValue + this.width - 1), ~~(yValue + this.height)) instanceof Gas)) {
             this.onGround = true;
         } else {
             this.onGround = false;
         }
-        if (getElementAtCell(~~(xValue), ~~(yValue)) !== undefined && !(getElementAtCell(~~(xValue), ~~(yValue)) instanceof Gas) || getElementAtCell(~~(xValue + this.width - 1), ~~(yValue)) !== undefined && !(getElementAtCell(~~(xValue + this.width - 1), ~~(yValue)) instanceof Gas)) {
+        if (!(getElementAtCell(~~(xValue), ~~(yValue)) instanceof Air) && !(getElementAtCell(~~(xValue), ~~(yValue)) instanceof Gas) || !(getElementAtCell(~~(xValue + this.width - 1), ~~(yValue)) instanceof Air) && !(getElementAtCell(~~(xValue + this.width - 1), ~~(yValue)) instanceof Gas)) {
             this.hasRoof = true;
         } else {
             this.hasRoof = false;
@@ -1027,8 +1054,15 @@ function getElementAtCell(x, y, startElement) {
         let relativeX = startElement.relativeX + x;
         let relativeY = startElement.relativeY + y;
         if (relativeX >= 0 && relativeX < CHUNKSIZE && relativeY >= 0 && relativeY < CHUNKSIZE) {
-            let el = startElement.chunk.elements[elementCoordinate(relativeX, relativeY)]
-            return el;
+            try {
+                let el = startElement.chunk.elements[elementCoordinate(relativeX, relativeY)]
+                return el;
+            } catch {
+                if (startElement.chunk == undefined) {
+                    console.log(startElement)
+                }
+
+            }
         } else {
             return getElementAtCell(startElement.x + x, startElement.y + y);
 
