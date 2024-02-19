@@ -140,7 +140,7 @@ function updateCursor() {
                     el.checkStateChange();
                     chunks[`${chunkX},${chunkY}`].hasUpdatedSinceFrameBufferChange = true;
                     chunks[`${chunkX},${chunkY}`].shouldStepNextFrame = true;
-                } else if ((chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] instanceof Air)) {
+                } else if ((chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)]?.constructor == Air)) {
                     if (tool == 1) {
                         chunks[`${chunkX},${chunkY}`].elements[elementCoordinate(elementX, elementY)] = new Water(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY);
                     } else if (tool == 2) {
@@ -284,7 +284,7 @@ class Chunk {
                 let dataIndex = coord * 4;
                 if (RENDERHEATMAP) {
                     let heatmap = valueToRGBRrange(0, 600, ~~el.temp)
-                    if (el instanceof Air) {
+                    if (el?.constructor == Air) {
                         this.frameBuffer.data[dataIndex] = ~~(heatmap.r * HEATMAPINTENSITY + backgroundEL.col[0] * (1 - HEATMAPINTENSITY));
                         this.frameBuffer.data[dataIndex + 1] = ~~(heatmap.g * HEATMAPINTENSITY + backgroundEL.col[1] * (1 - HEATMAPINTENSITY));
                         this.frameBuffer.data[dataIndex + 2] = ~~(heatmap.b * HEATMAPINTENSITY + backgroundEL.col[2] * (1 - HEATMAPINTENSITY));
@@ -295,7 +295,7 @@ class Chunk {
                     }
 
                     this.frameBuffer.data[dataIndex + 3] = 255;
-                } else if (el instanceof Air) {
+                } else if (el?.constructor == Air) {
                     if (backgroundEL) {
                         for (let i = 0; i < 3; i++) {
                             this.frameBuffer.data[dataIndex + i] = backgroundEL.col[i];
@@ -318,7 +318,7 @@ class Chunk {
                     let remover = 0;
                     if (el instanceof Liquid) {
                         targetCell = elementCoordinate(x, y - 1) > 0 ? (this.elements[elementCoordinate(x, y - 1)]) : chunks[`${this.x},${this.y - 1}`].elements[elementCoordinate(x, CHUNKSIZE - 1)];
-                        if (targetCell instanceof Air) {
+                        if (targetCell?.constructor == Air) {
                             remover = 80;
                         }
                     }
@@ -367,7 +367,7 @@ class Chunk {
     updateElements() {
         this.hasStepped = true;
         this.hasUpdatedSinceFrameBufferChange = true;
-        let filteredElements = fastShuffle(this.elements.filter(e => e && !e.unMovable));
+        let filteredElements = fastShuffle(this.elements.filter(e => !e.unMovable));
 
         for (let i = 0; i < filteredElements.length; i++) {
             let element = filteredElements[i];
@@ -375,7 +375,7 @@ class Chunk {
         }
         if (TEMPERATURECONDUCTING) {
             if (((this.x - currentFrame) % TEMPUPDATEINTERVAL == 0)) {
-                fastShuffle(this.elements.filter(e => (e && e.hasChangedTempRecently))).forEach(element => {
+                fastShuffle(this.elements.filter(e => (e.hasChangedTempRecently))).forEach(element => {
                     element.conductHeatNearby();
                 });
             } else {
@@ -439,7 +439,7 @@ class Particle {
             if (chunks[`${chunkX},${chunkY - 1}`]) chunks[`${chunkX},${chunkY - 1}`].hasUpdatedSinceFrameBufferChange = true;
             if (chunks[`${chunkX},${chunkY + 1}`]) chunks[`${chunkX},${chunkY + 1}`].hasUpdatedSinceFrameBufferChange = true;
 
-            if (!(getElementAtCell(this.drawX, this.drawY) instanceof Air)) {
+            if (!(getElementAtCell(this.drawX, this.drawY)?.constructor == Air)) {
                 this.x -= this.vel.x;
                 this.y -= this.vel.y;
                 this.drawX = ~~this.x;
@@ -450,7 +450,7 @@ class Particle {
                 let whileTimes = 0;
                 const MAXWHILE = 20;
 
-                while (!(getElementAtCell(this.drawX, this.drawY) instanceof Air) && whileTimes < MAXWHILE) {
+                while (!(getElementAtCell(this.drawX, this.drawY)?.constructor == Air) && whileTimes < MAXWHILE) {
                     whileTimes++;
                     if (getElementAtCell(this.drawX, this.drawY) instanceof this.type && getElementAtCell(this.drawX, this.drawY - 1) instanceof this.type || (getElementAtCell(this.drawX, this.drawY) instanceof this.type && getElementAtCell(this.drawX, this.drawY - 1) == undefined)) {
                         this.y -= 1;
@@ -464,15 +464,15 @@ class Particle {
                             let random = Math.random();
                             let targetCell1 = getElementAtCell(this.drawX - i, this.drawY);
                             let targetCell2 = getElementAtCell(this.drawX + i, this.drawY);
-                            if (random > 0.5 && (targetCell1 instanceof Air || targetCell1 instanceof this.type)) {
+                            if (random > 0.5 && (targetCell1?.constructor == Air || targetCell1 instanceof this.type)) {
                                 shortestOkLeft = i;
                                 shortestOkRight = 0;
                                 i = Infinity;
-                            } else if (targetCell2 instanceof Air || targetCell2 instanceof this.type) {
+                            } else if (targetCell2?.constructor == Air || targetCell2 instanceof this.type) {
                                 shortestOkLeft = 0;
                                 shortestOkRight = i;
                                 i = Infinity;
-                            } else if (targetCell1 instanceof Air || targetCell1 instanceof this.type) {
+                            } else if (targetCell1?.constructor == Air || targetCell1 instanceof this.type) {
                                 shortestOkLeft = i;
                                 shortestOkRight = 0;
                                 i = Infinity;
@@ -485,7 +485,7 @@ class Particle {
                         } else if (random > 0.5 && (shortestOkLeft !== 0 && shortestOkLeft !== Infinity)) {
                             this.x -= shortestOkLeft;
                             this.drawX = ~~this.x;
-                            if (getElementAtCell(this.drawX, this.drawY) instanceof Air) {
+                            if (getElementAtCell(this.drawX, this.drawY)?.constructor == Air) {
                                 break;
                             } else {
                                 this.y += 1;
@@ -494,7 +494,7 @@ class Particle {
                         } else if (shortestOkRight !== 0 && shortestOkRight !== Infinity) {
                             this.x += shortestOkRight;
                             this.drawX = ~~this.x;
-                            if (getElementAtCell(this.drawX, this.drawY) instanceof Air) {
+                            if (getElementAtCell(this.drawX, this.drawY)?.constructor == Air) {
                                 break;
                             } else {
                                 this.y += 1;
@@ -503,7 +503,7 @@ class Particle {
                         } else if (shortestOkLeft !== 0 && shortestOkLeft !== Infinity) {
                             this.x -= shortestOkLeft;
                             this.drawX = ~~this.x;
-                            if (getElementAtCell(this.drawX, this.drawY) instanceof Air) {
+                            if (getElementAtCell(this.drawX, this.drawY)?.constructor == Air) {
                                 break;
                             } else {
                                 this.y += 1;
@@ -515,7 +515,7 @@ class Particle {
                         }
                     }
                 }
-                if (getElementAtCell(this.drawX, this.drawY) instanceof Air) {
+                if (getElementAtCell(this.drawX, this.drawY)?.constructor == Air) {
                     this.convertToElement();
                 }
             }
@@ -530,7 +530,7 @@ class Particle {
             let elementY = ((this.drawY % CHUNKSIZE) + CHUNKSIZE) % CHUNKSIZE;
             let chunk = chunks[`${chunkX},${chunkY}`];
             if (!chunk) { createNewChunk(chunkX, chunkY) }
-            if (chunk.elements[elementCoordinate(elementX, elementY)] instanceof Air) {
+            if (chunk.elements[elementCoordinate(elementX, elementY)]?.constructor == Air) {
                 chunk.elements[elementCoordinate(elementX, elementY)] = new this.realType(chunkX * CHUNKSIZE + elementX, chunkY * CHUNKSIZE + elementY, this.col);
                 chunk.elements[elementCoordinate(elementX, elementY)].temp = this.temp;
 
@@ -656,7 +656,7 @@ class Element {
         this.conductHeat(el3, 1);
     }
     conductHeat(el, moveY) {
-        if (moveY <= 0 && el instanceof Air && this instanceof Air && el.temp < this.temp) {
+        if (moveY <= 0 && el?.constructor == Air && this?.constructor == Air && el.temp < this.temp) {
             let elTemp = el.temp;
             el.temp = this.temp;
             this.temp = elTemp;
@@ -753,7 +753,7 @@ class MovableSolid extends Solid {
     step() {
         this.isFreeFalling = this.newFreeFalling;
         let targetCell = getElementAtCell(0, 1, this);
-        if (targetCell instanceof Air || targetCell instanceof Liquid) {
+        if (targetCell?.constructor == Air || targetCell instanceof Liquid) {
             this.lookVertically();
         } else if (this.isFreeFalling) {
             this.lookDiagonally(~~(Math.random() * 2) || -1, true);
@@ -782,14 +782,14 @@ class MovableSolid extends Solid {
             let targetCell1 = getElementAtCell(i, 0, this);
             let targetCell2 = getElementAtCell(- i, 0, this);
             if (!rightMaxed) {
-                if (targetCell1 instanceof Air || targetCell1 instanceof Liquid) {
+                if (targetCell1?.constructor == Air || targetCell1 instanceof Liquid) {
                     maxRight = i
                 } else {
                     rightMaxed = true;
                 }
             }
             if (!leftMaxed) {
-                if ((targetCell2 instanceof Air || targetCell2 instanceof Liquid) && !leftMaxed) {
+                if ((targetCell2?.constructor == Air || targetCell2 instanceof Liquid) && !leftMaxed) {
                     maxLeft = i
                 } else {
                     leftMaxed = true;
@@ -813,7 +813,7 @@ class MovableSolid extends Solid {
         let maxDir = 0;
         for (let i = 1; i < ~~this.velY + 1; i++) {
             let targetCell = getElementAtCell(0, i, this);
-            if (targetCell instanceof Air || targetCell instanceof Liquid) {
+            if (targetCell?.constructor == Air || targetCell instanceof Liquid) {
                 maxDir = i;
             } else {
                 i = Infinity;
@@ -831,7 +831,7 @@ class MovableSolid extends Solid {
     lookDiagonally(dir, first) {
         let targetCell = getElementAtCell(dir, 1, this);
 
-        if (targetCell instanceof Air || targetCell instanceof Liquid) {
+        if (targetCell?.constructor == Air || targetCell instanceof Liquid) {
             this.moveTo(this.x + dir, this.y + 1);
         } else if (first == true) {
             this.lookDiagonally(-dir, false);
@@ -852,7 +852,7 @@ class Liquid extends Element {
     }
     step() {
         let targetCell = getElementAtCell(0, 1 * this.flowDir, this);
-        if (targetCell instanceof Air || (targetCell instanceof this.flowThrough && !(targetCell instanceof this.constructor))) {
+        if (targetCell?.constructor == Air || (targetCell instanceof this.flowThrough && !(targetCell instanceof this.constructor))) {
             this.lookVertically();
         } else if (Math.random() < this.flowChance) {
             this.velY = 1;
@@ -863,7 +863,7 @@ class Liquid extends Element {
         let maxDir = 0;
         for (let i = 1; i < ~~this.velY + 1; i++) {
             let targetCell = getElementAtCell(0, i * this.flowDir, this);
-            if (targetCell instanceof Air || (targetCell instanceof this.flowThrough && !(targetCell instanceof this.constructor))) {
+            if (targetCell?.constructor == Air || (targetCell instanceof this.flowThrough && !(targetCell instanceof this.constructor))) {
                 maxDir = i
             } else {
                 i = Infinity;
@@ -884,14 +884,14 @@ class Liquid extends Element {
             let targetCell1 = getElementAtCell(i, 0, this);
             let targetCell2 = getElementAtCell(-i, 0, this);
             if (!rightMaxed) {
-                if (targetCell1 instanceof Air || targetCell1 instanceof this.flowThrough && !(targetCell1 instanceof this.constructor)) {
+                if (targetCell1?.constructor == Air || targetCell1 instanceof this.flowThrough && !(targetCell1 instanceof this.constructor)) {
                     maxRight = i
                 } else {
                     rightMaxed = true;
                 }
             }
             if (!leftMaxed) {
-                if ((targetCell2 instanceof Air || targetCell2 instanceof this.flowThrough && !(targetCell2 instanceof this.constructor)) && !leftMaxed) {
+                if ((targetCell2?.constructor == Air || targetCell2 instanceof this.flowThrough && !(targetCell2 instanceof this.constructor)) && !leftMaxed) {
                     maxLeft = i
                 } else {
                     leftMaxed = true;
@@ -992,7 +992,7 @@ class Player {
             let x = xValue;
             let y = yValue + i;
             let el = getElementAtCell(x, y);
-            if (!(el instanceof Liquid || el instanceof Air)) {
+            if (!(el instanceof Liquid || el?.constructor == Air)) {
                 this.x -= this.vx - 0.01;
                 this.vx = 0;
             };
@@ -1001,7 +1001,7 @@ class Player {
             let x = xValue + i;
             let y = yValue;
             let el = getElementAtCell(x, y);
-            if (!(el instanceof Liquid || el instanceof Air)) {
+            if (!(el instanceof Liquid || el?.constructor == Air)) {
                 this.y -= this.vy - 0.1;
                 this.vy = -this.vy * this.roofPowerBack;
             } else if (el instanceof Liquid && !(el instanceof Gas)) {
@@ -1012,7 +1012,7 @@ class Player {
             let x = xValue + this.width;
             let y = yValue + i;
             let el = getElementAtCell(x, y);
-            if (!(el instanceof Liquid || el instanceof Air)) {
+            if (!(el instanceof Liquid || el?.constructor == Air)) {
                 this.x -= this.vx + 0.01;
                 this.vx = 0;
             };
@@ -1021,19 +1021,19 @@ class Player {
             let x = xValue + i;
             let y = yValue + this.height - 1;
             let el = getElementAtCell(x, y);
-            if (!(el instanceof Liquid || el instanceof Air)) {
+            if (!(el instanceof Liquid || el?.constructor == Air)) {
                 this.y -= this.vy + 0.1;
                 this.vy = 0;
             } else if (el instanceof Liquid && !(el instanceof Gas)) {
                 this.vy *= this.waterLoss;
             };
         };
-        if (!(getElementAtCell(~~(xValue), ~~(yValue + this.height)) instanceof Air) && !(getElementAtCell(~~(xValue), ~~(yValue + this.height)) instanceof Gas) || !(getElementAtCell(~~(xValue + this.width - 1), ~~(yValue + this.height)) instanceof Air) && !(getElementAtCell(~~(xValue + this.width - 1), ~~(yValue + this.height)) instanceof Gas)) {
+        if (!(getElementAtCell(~~(xValue), ~~(yValue + this.height))?.constructor == Air) && !(getElementAtCell(~~(xValue), ~~(yValue + this.height)) instanceof Gas) || !(getElementAtCell(~~(xValue + this.width - 1), ~~(yValue + this.height))?.constructor == Air) && !(getElementAtCell(~~(xValue + this.width - 1), ~~(yValue + this.height)) instanceof Gas)) {
             this.onGround = true;
         } else {
             this.onGround = false;
         }
-        if (!(getElementAtCell(~~(xValue), ~~(yValue)) instanceof Air) && !(getElementAtCell(~~(xValue), ~~(yValue)) instanceof Gas) || !(getElementAtCell(~~(xValue + this.width - 1), ~~(yValue)) instanceof Air) && !(getElementAtCell(~~(xValue + this.width - 1), ~~(yValue)) instanceof Gas)) {
+        if (!(getElementAtCell(~~(xValue), ~~(yValue))?.constructor == Air) && !(getElementAtCell(~~(xValue), ~~(yValue)) instanceof Gas) || !(getElementAtCell(~~(xValue + this.width - 1), ~~(yValue))?.constructor == Air) && !(getElementAtCell(~~(xValue + this.width - 1), ~~(yValue)) instanceof Gas)) {
             this.hasRoof = true;
         } else {
             this.hasRoof = false;
