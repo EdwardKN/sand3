@@ -657,12 +657,14 @@ class Element {
     }
     conductHeat(el, moveY) {
         if (moveY <= 0 && el instanceof Air && this instanceof Air && el.temp < this.temp) {
-            let elTemp = el.temp;
-            el.temp = this.temp;
-            this.temp = elTemp;
-            this.hasChangedTempRecently = true;
-            this.chunk.shouldStepNextFrame = true;
-            this.checkStateChange();
+            if (Math.abs(el.temp - this.temp) > 0.01) {
+                let elTemp = el.temp;
+                el.temp = this.temp;
+                this.temp = elTemp;
+                this.hasChangedTempRecently = true;
+                this.chunk.shouldStepNextFrame = true;
+                this.checkStateChange();
+            }
         } else if (el) {
             let thermalConductivity = this.thermalConductivity;
             if (thermalConductivity > el.thermalConductivity) {
