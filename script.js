@@ -11,8 +11,8 @@ const PARTICLES = true;
 
 const TEMPERATURECONDUCTING = true;
 
-const TEMPUPDATEINTERVAL = 5; // INSTABIL ÖVER 7
-const THERMALCONDUCTIVITYMULTIPLIER = 0.1 * TEMPUPDATEINTERVAL;
+const TEMPUPDATEINTERVAL = 5;
+const THERMALCONDUCTIVITYMULTIPLIER = 0.1 * TEMPUPDATEINTERVAL; // instabil över 0.7
 
 const HEATMAPINTENSITY = 0;
 const RENDERHEATMAP = HEATMAPINTENSITY > 0;
@@ -664,6 +664,8 @@ class Element {
                 this.hasChangedTempRecently = true;
                 this.chunk.shouldStepNextFrame = true;
                 this.checkStateChange();
+            } else {
+                this.hasChangedTempRecently = false;
             }
         } else if (el) {
             let thermalConductivity = this.thermalConductivity;
@@ -684,11 +686,15 @@ class Element {
                 this.hasChangedTempRecently = true;
                 this.chunk.shouldStepNextFrame = true;
                 this.checkStateChange();
+            } else {
+                this.hasChangedTempRecently = false;
             }
             if (elTempChange > 0.05 || elTempChange < -0.05) {
                 el.hasChangedTempRecently = true;
                 el.chunk.shouldStepNextFrame = true;
                 el.checkStateChange();
+            } else {
+                el.hasChangedTempRecently = false;
             }
         }
     }
