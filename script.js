@@ -40,23 +40,18 @@ var tool = 1;
 
 
 async function init() {
-    await loadData();
-    await new Promise(e => setTimeout(e, 500));
     player = new Player();
     fixCanvas();
-    update();
 }
 
 var perArr = [];
+let per = 0;
 async function update() {
     renderC.imageSmoothingEnabled = false;
 
-    renderC.clearRect(0, 0, renderCanvas.width, renderCanvas.height)
-    c.clearRect(0, 0, canvas.width, canvas.height);
+    per = performance.now();
+    if (player) { player.update(); }
 
-    player.update();
-
-    let per = performance.now();
 
     for (let i = 0; i < SIMULATIONSTEPSPERFRAME; i++) {
         updateParticles();
@@ -68,8 +63,10 @@ async function update() {
 
     updateCursor();
 
+    currentFrame++;
+};
 
-
+function customRender() {
     renderC.drawImage(canvas, -scale - (player.camera.x % 1) * scale, -scale - (player.camera.y % 1) * scale, renderCanvas.width + scale * 2, renderCanvas.height + scale * 2);
 
     player.draw();
@@ -89,10 +86,7 @@ async function update() {
 
     renderC.drawText(tool, 10, 420, 10)
 
-    requestAnimationFrame(update);
-
-    currentFrame++;
-};
+}
 
 function updateCursor() {
     c.lineWidth = 1;
@@ -312,12 +306,13 @@ class Chunk {
                     let ab = 1;
                     let a0 = aa + ab * (1 - aa);
 
-                    let combinedA = (ab * (1 - aa)) / a0
+                    let combinedA = (ab * (1 - aa)) / a0;
 
                     let targetCell = true;
                     let remover = 0;
                     if (el instanceof Liquid) {
-                        targetCell = elementCoordinate(x, y - 1) > 0 ? (this.elements[elementCoordinate(x, y - 1)]) : chunks[`${this.x},${this.y - 1}`].elements[elementCoordinate(x, CHUNKSIZE - 1)];
+                        let elCoord = elementCoordinate(x, y - 1);
+                        targetCell = elCoord > 0 ? this.elements[elCoord] : chunks[`${this.x},${this.y - 1}`].elements[elementCoordinate(x, CHUNKSIZE - 1)];
                         if (targetCell?.constructor == Air) {
                             remover = 80;
                         }
