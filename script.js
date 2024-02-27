@@ -155,12 +155,14 @@ function updateCursor() {
 
     }
 }
+function doOnKeyDown(e) {
+    changeTool(e.code)
+}
 
 function changeTool(key) {
     if (key.includes('Digit')) {
         tool = JSON.parse(key.replaceAll('Digit', ''));
     }
-
 }
 
 function drawVisibleChunks() {
